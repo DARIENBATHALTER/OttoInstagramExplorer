@@ -448,6 +448,10 @@ class DataManager {
             // Convert object structure to flat array
             Object.entries(commentsObj).forEach(([postId, postComments]) => {
                 postComments.forEach(comment => {
+                    // Find the corresponding post to get its title
+                    const post = this.getVideo(postId);
+                    const postTitle = post?.title || post?.description?.substring(0, 100) || '@jonno.otto Instagram Post';
+                    
                     this.comments.push({
                         ...comment,
                         video_id: postId,
@@ -456,7 +460,8 @@ class DataManager {
                         like_count: comment.reactionsCount,
                         published_at: new Date(comment.commentAt),
                         parent_comment_id: comment.depth > 0 ? 'parent' : null,
-                        is_reply: comment.depth > 0
+                        is_reply: comment.depth > 0,
+                        video_title: postTitle
                     });
                 });
             });
@@ -499,9 +504,14 @@ class DataManager {
                     if (commentData.comments && commentData.comments.length > 0) {
                         // Comments are now full comment objects, not just IDs
                         commentData.comments.forEach(comment => {
+                            // Find the corresponding post to get its title
+                            const post = this.getVideo(shortcode);
+                            const postTitle = post?.title || post?.description?.substring(0, 100) || '@jonno.otto Instagram Post';
+                            
                             this.comments.push({
                                 ...comment,
-                                video_id: shortcode
+                                video_id: shortcode,
+                                video_title: postTitle
                             });
                         });
                         totalComments += commentData.comments.length;

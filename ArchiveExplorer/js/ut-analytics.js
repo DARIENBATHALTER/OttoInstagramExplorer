@@ -264,7 +264,8 @@ class UTAnalytics {
                     if (analytics.sentiment[category].examples.length < 3) {
                         analytics.sentiment[category].examples.push({
                             text: comment.text || comment.content,
-                            author: author
+                            author: author,
+                            video_title: comment.video_title || '@jonno.otto Instagram Post'
                         });
                     }
                 }
@@ -277,7 +278,8 @@ class UTAnalytics {
                     if (analytics.engagement[category].examples.length < 3) {
                         analytics.engagement[category].examples.push({
                             text: comment.text || comment.content,
-                            author: author
+                            author: author,
+                            video_title: comment.video_title || '@jonno.otto Instagram Post'
                         });
                     }
                 }
@@ -290,7 +292,8 @@ class UTAnalytics {
                     if (analytics.health_topics[category].examples.length < 3) {
                         analytics.health_topics[category].examples.push({
                             text: comment.text || comment.content,
-                            author: author
+                            author: author,
+                            video_title: comment.video_title || '@jonno.otto Instagram Post'
                         });
                     }
                 }
@@ -360,6 +363,9 @@ class UTAnalytics {
                                         <small class="text-muted d-block">
                                             <i>"${data.examples[0].text}..."</i> - @${data.examples[0].author}
                                         </small>
+                                        <small class="text-muted d-block" style="font-size: 0.75rem;">
+                                            <i class="bi bi-camera me-1"></i>${data.examples[0].video_title || '@jonno.otto Instagram Post'}
+                                        </small>
                                     ` : ''}
                                     <small class="text-primary d-block mt-1">
                                         <i class="bi bi-filter me-1"></i>Click to filter comments
@@ -412,6 +418,9 @@ class UTAnalytics {
                                                 <div class="example-item mb-2 p-2 bg-light rounded">
                                                     <small class="text-muted">@${ex.author}:</small>
                                                     <small class="d-block">"${ex.text}..."</small>
+                                                    <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                                        <i class="bi bi-camera me-1"></i>${ex.video_title || '@jonno.otto Instagram Post'}
+                                                    </small>
                                                 </div>
                                             `).join('')}
                                         </div>
@@ -474,6 +483,9 @@ class UTAnalytics {
                         ${data.examples.length > 0 ? `
                             <div class="example-quote p-2 bg-light rounded">
                                 <small>"${data.examples[0].text}..." - @${data.examples[0].author}</small>
+                                <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">
+                                    <i class="bi bi-camera me-1"></i>${data.examples[0].video_title || '@jonno.otto Instagram Post'}
+                                </small>
                             </div>
                         ` : ''}
                         <small class="text-primary d-block mt-2">
