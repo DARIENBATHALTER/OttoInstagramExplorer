@@ -62,3 +62,13 @@ build/
 # Temporary files
 *.tmp
 *.temp
+
+# Large data files
+comment_sample.txt
+MMArchiveExplorer/data/parsed/comments.csv
+MMArchiveExplorer/data/parsed/posts.csv
+
+# Archive data files (too large for GitHub)
+**/data/comments.json
+**/data/instagram-comments.json
+**/data/*.csv
