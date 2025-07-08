@@ -724,18 +724,15 @@ class ArchiveExplorer {
             // Load initial posts grid
             await this.loadVideoGrid();
             
-            console.log('🔥 DEBUG: TEMPORARILY SKIPPING ANALYTICS TO DEBUG DATA LOADING FREEZE');
-            
-            // TEMPORARILY DISABLED - focusing on data loading freeze
             // Initialize global analytics and preload all data (for audience analytics modal)
-            // console.log('🔥 DEBUG: Calling initializeGlobalAnalytics...');
-            // await this.initializeGlobalAnalytics();
-            // console.log('🔥 DEBUG: initializeGlobalAnalytics completed');
+            console.log('🔥 DEBUG: Calling initializeGlobalAnalytics...');
+            await this.initializeGlobalAnalytics();
+            console.log('🔥 DEBUG: initializeGlobalAnalytics completed');
             
             // Preload comments and analytics content
-            // console.log('🔥 DEBUG: Calling preloadAnalyticsData...');
-            // await this.preloadAnalyticsData();
-            // console.log('🔥 DEBUG: preloadAnalyticsData completed');
+            console.log('🔥 DEBUG: Calling preloadAnalyticsData...');
+            await this.preloadAnalyticsData();
+            console.log('🔥 DEBUG: preloadAnalyticsData completed');
             
             // Update stats
             this.updateStats();
