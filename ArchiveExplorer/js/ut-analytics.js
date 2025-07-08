@@ -3,11 +3,12 @@
  * Handles specialized analytics for UT content
  */
 class UTAnalytics {
-    constructor(archiveDirectoryManager = null) {
+    constructor(archiveDirectoryManager = null, dataManager = null) {
         this.analyticsData = null;
         this.initialized = false;
         this.filterCallback = null;
         this.archiveDirectoryManager = archiveDirectoryManager;
+        this.dataManager = dataManager;
     }
 
     /**
@@ -27,8 +28,8 @@ class UTAnalytics {
             
             // Use File System Access API to load from user's selected directory
             if (!this.archiveDirectoryManager || !this.archiveDirectoryManager.archiveHandle) {
-                console.warn('⚠️ No archive directory manager available, using fallback analytics');
-                this.generateFallbackAnalytics();
+                console.warn('⚠️ No archive directory manager available, generating from comments');
+                this.generateAnalyticsFromComments();
                 return;
             }
             
@@ -62,15 +63,15 @@ class UTAnalytics {
                 
             } catch (fileError) {
                 console.warn('⚠️ ut-analytics.json not found in user directory:', fileError.message);
-                console.log('⚠️ Generating fallback analytics data...');
-                this.generateFallbackAnalytics();
+                console.log('⚠️ Generating analytics from real comments...');
+                this.generateAnalyticsFromComments();
                 return true;
             }
         } catch (error) {
             console.error('❌ CRITICAL ERROR loading UT analytics:', error);
             console.error('❌ Error stack:', error.stack);
-            console.log('⚠️ Generating fallback data due to critical error...');
-            this.generateFallbackAnalytics();
+            console.log('⚠️ Generating analytics from real comments due to error...');
+            this.generateAnalyticsFromComments();
             return true;
         }
     }
@@ -191,6 +192,136 @@ class UTAnalytics {
         
         this.initialized = true;
         console.log('✅ Fallback analytics generated');
+    }
+
+    /**
+     * Generate analytics from real comments data
+     */
+    generateAnalyticsFromComments() {
+        console.log('🔄 Generating analytics from real comments...');
+        
+        if (!this.dataManager || !this.dataManager.comments || this.dataManager.comments.length === 0) {
+            console.warn('⚠️ No comments available, using fallback');
+            this.generateFallbackAnalytics();
+            return;
+        }
+        
+        const comments = this.dataManager.comments;
+        console.log(`📊 Analyzing ${comments.length} real comments...`);
+        
+        // Keywords for categorization
+        const sentimentKeywords = {
+            supportive: ['thank you', 'amazing', 'helped', 'healing', 'grateful', 'love this', 'works', 'improved', 'better', 'recommend'],
+            skeptical: ['dangerous', 'unsafe', 'proven', 'scientific', 'doubt', 'risk', 'doctor', 'medical', 'worry', 'concern'],
+            curious: ['how long', 'how to', 'when should', 'what time', 'can i', 'should i', 'why does', 'what if', 'anyone know', '?'],
+            humorous: ['lol', 'lmao', 'haha', '😂', '🤣', 'funny', 'crazy', 'wild', 'cant believe', 'joke']
+        };
+        
+        const engagementKeywords = {
+            testimonials: ['i tried', 'ive been', 'my experience', 'works for me', 'changed my', 'results', 'before and after', 'months ago', 'years ago'],
+            medical_questions: ['medication', 'diabetes', 'condition', 'safe with', 'doctor', 'health', 'disease', 'pregnant', 'allergic'],
+            method_questions: ['how much', 'how often', 'first time', 'morning', 'evening', 'fresh', 'aged', 'diluted', 'topical'],
+            lifestyle_integration: ['routine', 'daily', 'lifestyle', 'combine with', 'diet', 'exercise', 'schedule', 'habit']
+        };
+        
+        const healthKeywords = {
+            skin_issues: ['skin', 'acne', 'eczema', 'psoriasis', 'rash', 'clear', 'glow', 'complexion'],
+            digestive: ['digestion', 'stomach', 'gut', 'bloating', 'ibs', 'constipation'],
+            energy: ['energy', 'fatigue', 'tired', 'vitality', 'stamina', 'strength'],
+            immune: ['immune', 'cold', 'flu', 'infection', 'illness', 'sick']
+        };
+        
+        // Initialize counters
+        const analytics = {
+            sentiment: {},
+            engagement: {},
+            health_topics: {}
+        };
+        
+        // Initialize categories
+        Object.keys(sentimentKeywords).forEach(key => {
+            analytics.sentiment[key] = { count: 0, examples: [] };
+        });
+        Object.keys(engagementKeywords).forEach(key => {
+            analytics.engagement[key] = { count: 0, examples: [] };
+        });
+        Object.keys(healthKeywords).forEach(key => {
+            analytics.health_topics[key] = { count: 0, examples: [] };
+        });
+        
+        // Analyze each comment
+        comments.forEach(comment => {
+            const text = (comment.text || comment.content || '').toLowerCase();
+            const author = comment.author || comment.username || 'anonymous';
+            
+            // Skip very short comments
+            if (text.length < 10) return;
+            
+            // Categorize sentiment
+            for (const [category, keywords] of Object.entries(sentimentKeywords)) {
+                if (keywords.some(keyword => text.includes(keyword))) {
+                    analytics.sentiment[category].count++;
+                    if (analytics.sentiment[category].examples.length < 3) {
+                        analytics.sentiment[category].examples.push({
+                            text: comment.text || comment.content,
+                            author: author
+                        });
+                    }
+                }
+            }
+            
+            // Categorize engagement
+            for (const [category, keywords] of Object.entries(engagementKeywords)) {
+                if (keywords.some(keyword => text.includes(keyword))) {
+                    analytics.engagement[category].count++;
+                    if (analytics.engagement[category].examples.length < 3) {
+                        analytics.engagement[category].examples.push({
+                            text: comment.text || comment.content,
+                            author: author
+                        });
+                    }
+                }
+            }
+            
+            // Categorize health topics
+            for (const [category, keywords] of Object.entries(healthKeywords)) {
+                if (keywords.some(keyword => text.includes(keyword))) {
+                    analytics.health_topics[category].count++;
+                    if (analytics.health_topics[category].examples.length < 3) {
+                        analytics.health_topics[category].examples.push({
+                            text: comment.text || comment.content,
+                            author: author
+                        });
+                    }
+                }
+            }
+        });
+        
+        // Sort comments by likes for top comments
+        const sortedByLikes = [...comments]
+            .filter(c => (c.like_count || c.reactionsCount || 0) > 0)
+            .sort((a, b) => (b.like_count || b.reactionsCount || 0) - (a.like_count || a.reactionsCount || 0))
+            .slice(0, 10);
+        
+        this.analyticsData = {
+            total_comments: comments.length,
+            analytics: analytics,
+            top_liked_comments: sortedByLikes.map(c => ({
+                text: c.text || c.content,
+                author: c.author || c.username || 'anonymous',
+                likes: c.like_count || c.reactionsCount || 0,
+                video_title: c.video_title || 'Instagram Post'
+            }))
+        };
+        
+        this.initialized = true;
+        console.log('✅ Analytics generated from real comments');
+        console.log('📊 Analytics summary:', {
+            total: comments.length,
+            sentiment: Object.fromEntries(Object.entries(analytics.sentiment).map(([k, v]) => [k, v.count])),
+            engagement: Object.fromEntries(Object.entries(analytics.engagement).map(([k, v]) => [k, v.count])),
+            health: Object.fromEntries(Object.entries(analytics.health_topics).map(([k, v]) => [k, v.count]))
+        });
     }
 
     /**

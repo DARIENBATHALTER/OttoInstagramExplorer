@@ -1906,7 +1906,7 @@ class ArchiveExplorer {
             // Initialize UT Analytics if not already done
             if (!this.utAnalytics) {
                 console.log('🔄 Creating new UTAnalytics instance...');
-                this.utAnalytics = new UTAnalytics(this.dataManager.archiveDirectoryManager);
+                this.utAnalytics = new UTAnalytics(this.dataManager.archiveDirectoryManager, this.dataManager);
                 console.log('✅ UTAnalytics instance created with directory manager');
                 
                 // Load analytics from user's directory using File System Access API
