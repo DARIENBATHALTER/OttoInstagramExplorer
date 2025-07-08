@@ -2002,7 +2002,6 @@ class ArchiveExplorer {
                     allTexts.push(text);
                 }
             });
-            });
             
             console.log(`📝 Extracted ${allTexts.length} text strings for word cloud`);
             
