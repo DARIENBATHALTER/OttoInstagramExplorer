@@ -3,10 +3,11 @@
  * Handles specialized analytics for UT content
  */
 class UTAnalytics {
-    constructor() {
+    constructor(archiveDirectoryManager = null) {
         this.analyticsData = null;
         this.initialized = false;
         this.filterCallback = null;
+        this.archiveDirectoryManager = archiveDirectoryManager;
     }
 
     /**
@@ -17,72 +18,54 @@ class UTAnalytics {
     }
 
     /**
-     * Load pre-computed UT analytics
+     * Load pre-computed UT analytics using File System Access API
      */
     async loadAnalytics() {
         try {
             console.log('🔄 UT ANALYTICS LOADING START');
             console.log('🔄 Step 1: Method entered');
             
-            // TODO: KNOWN ISSUE - Hardcoded path is problematic since data is uploaded by users 
-            // each session via File System Access API. Should use user-uploaded data instead.
-            // Try to load from the archive directory selected by user
-            const url = '../../../jonno_otto_ig_archive/jonno_otto_preindexed_data/ut-analytics.json';
-            console.log('🔄 Step 2: URL constructed:', url);
-            console.log('🔄 Step 3: About to create fetch request...');
+            // Use File System Access API to load from user's selected directory
+            if (!this.archiveDirectoryManager || !this.archiveDirectoryManager.archiveHandle) {
+                console.warn('⚠️ No archive directory manager available, using fallback analytics');
+                this.generateFallbackAnalytics();
+                return;
+            }
             
-            let response;
+            console.log('🔄 Step 2: Getting preindexed directory handle...');
+            const preindexedHandle = await this.archiveDirectoryManager.archiveHandle.getDirectoryHandle('jonno_otto_preindexed_data');
+            console.log('📁 Got preindexed directory handle');
+            
             try {
-                console.log('🔄 Step 4: Creating AbortController...');
-                // Add timeout to prevent hanging
-                const controller = new AbortController();
-                console.log('🔄 Step 5: Setting timeout...');
-                const timeoutId = setTimeout(() => {
-                    console.log('🔄 Step 5a: Timeout triggered, aborting...');
-                    controller.abort();
-                }, 5000); // 5 second timeout
+                console.log('🔄 Step 3: Getting ut-analytics.json file handle...');
+                const analyticsFileHandle = await preindexedHandle.getFileHandle('ut-analytics.json');
+                console.log('📄 Got analytics file handle');
                 
-                console.log('🔄 Step 6: About to call fetch...');
-                response = await fetch(url, {
-                    signal: controller.signal
-                });
-                console.log('🔄 Step 7: Fetch completed, clearing timeout...');
-                clearTimeout(timeoutId);
+                const analyticsFile = await analyticsFileHandle.getFile();
+                console.log(`📊 Analytics file size: ${(analyticsFile.size / 1024).toFixed(1)}KB`);
                 
-                console.log('🔍 UT Analytics fetch response:', {
-                    ok: response.ok,
-                    status: response.status,
-                    statusText: response.statusText,
-                    url: response.url
+                console.log('🔄 Step 4: Reading file content...');
+                const fileText = await analyticsFile.text();
+                console.log('🔄 Step 5: Parsing JSON...');
+                
+                this.analyticsData = JSON.parse(fileText);
+                console.log('🔍 UT Analytics data loaded:', {
+                    type: typeof this.analyticsData,
+                    keys: Object.keys(this.analyticsData || {}),
+                    hasAnalytics: !!this.analyticsData?.analytics,
+                    analyticsKeys: this.analyticsData?.analytics ? Object.keys(this.analyticsData.analytics) : null
                 });
-            } catch (err) {
-                console.error('❌ Network error loading UT analytics:', err);
-                if (err.name === 'AbortError') {
-                    console.log('⚠️ UT Analytics fetch timed out after 5 seconds');
-                }
-                console.log('⚠️ Generating fallback data due to network error...');
+                
+                this.initialized = true;
+                console.log('✅ UT ANALYTICS LOADED SUCCESSFULLY from user directory');
+                return true;
+                
+            } catch (fileError) {
+                console.warn('⚠️ ut-analytics.json not found in user directory:', fileError.message);
+                console.log('⚠️ Generating fallback analytics data...');
                 this.generateFallbackAnalytics();
                 return true;
             }
-            
-            if (!response.ok) {
-                console.warn(`⚠️ UT analytics fetch failed: ${response.status} ${response.statusText}`);
-                console.log('⚠️ Generating fallback data due to failed fetch...');
-                this.generateFallbackAnalytics();
-                return true;
-            }
-            
-            this.analyticsData = await response.json();
-            console.log('🔍 UT Analytics data loaded:', {
-                type: typeof this.analyticsData,
-                keys: Object.keys(this.analyticsData),
-                hasAnalytics: !!this.analyticsData.analytics,
-                analyticsKeys: this.analyticsData.analytics ? Object.keys(this.analyticsData.analytics) : null
-            });
-            
-            this.initialized = true;
-            console.log('✅ UT ANALYTICS LOADED SUCCESSFULLY');
-            return true;
         } catch (error) {
             console.error('❌ CRITICAL ERROR loading UT analytics:', error);
             console.error('❌ Error stack:', error.stack);

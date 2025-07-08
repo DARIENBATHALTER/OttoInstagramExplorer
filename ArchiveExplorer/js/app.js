@@ -1909,24 +1909,19 @@ class ArchiveExplorer {
             // Initialize UT Analytics if not already done
             if (!this.utAnalytics) {
                 console.log('🔄 Creating new UTAnalytics instance...');
-                this.utAnalytics = new UTAnalytics();
-                console.log('✅ UTAnalytics instance created');
+                this.utAnalytics = new UTAnalytics(this.dataManager.archiveDirectoryManager);
+                console.log('✅ UTAnalytics instance created with directory manager');
                 
-                // TEMPORARILY SKIP FILE LOADING - USE FALLBACK DATA
-                console.log('⚠️ TEMPORARILY using fallback data to debug freezing issue');
-                this.utAnalytics.generateFallbackAnalytics();
-                console.log('✅ Fallback UT Analytics initialized');
-                
-                // TODO: Re-enable file loading once freezing is resolved
-                // try {
-                //     console.log('🔄 About to call loadAnalytics...');
-                //     await this.utAnalytics.loadAnalytics();
-                //     console.log('✅ Global UT Analytics initialized');
-                // } catch (error) {
-                //     console.error('❌ Failed to load UT Analytics:', error);
-                //     console.log('⚠️ Using fallback analytics data');
-                //     this.utAnalytics.generateFallbackAnalytics();
-                // }
+                // Load analytics from user's directory using File System Access API
+                try {
+                    console.log('🔄 About to call loadAnalytics...');
+                    await this.utAnalytics.loadAnalytics();
+                    console.log('✅ Global UT Analytics initialized');
+                } catch (error) {
+                    console.error('❌ Failed to load UT Analytics:', error);
+                    console.log('⚠️ Using fallback analytics data');
+                    this.utAnalytics.generateFallbackAnalytics();
+                }
             }
             
             // Setup audience analytics modal now that data is loaded
@@ -1990,37 +1985,23 @@ class ArchiveExplorer {
      */
     async preloadWordCloudData() {
         try {
-            // TODO: KNOWN ISSUE - Hardcoded path is problematic since data is uploaded by users 
-            // each session via File System Access API. Should use user-uploaded data instead.
-            const url = '../../../jonno_otto_ig_archive/jonno_otto_preindexed_data/instagram-comments.json';
-            console.log('📥 Fetching Instagram comments for word cloud from:', url);
-            
-            // Add timeout to prevent hanging
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-            
-            const response = await fetch(url, {
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            
-            if (!response.ok) {
-                throw new Error(`Failed to load Instagram comments: ${response.status} ${response.statusText}`);
+            // Use DataManager's comments loaded via File System Access API
+            if (!this.dataManager || !this.dataManager.comments || this.dataManager.comments.length === 0) {
+                console.warn('⚠️ No comments available in DataManager for word cloud');
+                return;
             }
             
-            const commentsData = await response.json();
+            console.log('📥 Using comments from DataManager for word cloud');
+            const allComments = this.dataManager.comments;
             const allTexts = [];
             
-            // Extract all comment texts
-            Object.values(commentsData).forEach((comments) => {
-                if (Array.isArray(comments)) {
-                    comments.forEach(comment => {
-                        const text = comment.text || comment.content;
-                        if (text && text.length > 2) {
-                            allTexts.push(text);
-                        }
-                    });
+            // Extract all comment texts from DataManager's comments
+            allComments.forEach((comment) => {
+                const text = comment.text || comment.content;
+                if (text && text.length > 2) {
+                    allTexts.push(text);
                 }
+            });
             });
             
             console.log(`📝 Extracted ${allTexts.length} text strings for word cloud`);
@@ -2287,46 +2268,29 @@ class ArchiveExplorer {
             console.log('🔄 WORD CLOUD LOADING START');
             console.log('🔍 Container element:', container);
             
-            // TODO: KNOWN ISSUE - Hardcoded path is problematic since data is uploaded by users 
-            // each session via File System Access API. Should use user-uploaded data instead.
-            // Load Instagram comments and generate word cloud
-            const url = '../../../jonno_otto_ig_archive/jonno_otto_preindexed_data/instagram-comments.json';
-            console.log('🔄 Fetching Instagram comments from:', url);
-            
-            const response = await fetch(url);
-            console.log('🔍 Fetch response:', {
-                ok: response.ok,
-                status: response.status,
-                statusText: response.statusText,
-                url: response.url
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Failed to load Instagram comments: ${response.status} ${response.statusText}`);
+            // Use DataManager's comments loaded via File System Access API
+            if (!this.dataManager || !this.dataManager.comments || this.dataManager.comments.length === 0) {
+                console.warn('⚠️ No comments available in DataManager for word cloud');
+                container.innerHTML = '<p class="text-muted">No comment data available for word cloud</p>';
+                return;
             }
             
-            const commentsData = await response.json();
+            console.log('🔄 Using comments from DataManager for word cloud');
+            const allComments = this.dataManager.comments;
             console.log('🔍 Comments data loaded:', {
-                type: typeof commentsData,
-                isArray: Array.isArray(commentsData),
-                keys: Object.keys(commentsData).length,
-                firstFewKeys: Object.keys(commentsData).slice(0, 5)
+                type: typeof allComments,
+                isArray: Array.isArray(allComments),
+                count: allComments.length,
+                firstFewComments: allComments.slice(0, 3).map(c => c.text || c.content)
             });
             
             const allTexts = [];
             
-            // Extract all comment texts
-            Object.values(commentsData).forEach((comments, index) => {
-                if (Array.isArray(comments)) {
-                    comments.forEach(comment => {
-                        const text = comment.text || comment.content;
-                        if (text && text.length > 2) {
-                            allTexts.push(text);
-                        }
-                    });
-                    if (index < 3) {
-                        console.log(`🔍 Post ${index} has ${comments.length} comments`);
-                    }
+            // Extract all comment texts from DataManager's comments
+            allComments.forEach((comment) => {
+                const text = comment.text || comment.content;
+                if (text && text.length > 2) {
+                    allTexts.push(text);
                 }
             });
             

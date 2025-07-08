@@ -57,67 +57,17 @@ class ModalCommentsManager {
         this.allComments = [];
         
         try {
-            // TODO: KNOWN ISSUE - Hardcoded path is problematic since data is uploaded by users 
-            // each session via File System Access API. Should use user-uploaded data instead.
-            // Load directly from the preindexed Instagram comments file
-            const url = '../../../jonno_otto_ig_archive/jonno_otto_preindexed_data/instagram-comments.json';
-            console.log('🔄 Fetching comments from:', url);
-            
-            // Add timeout to prevent hanging
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-            
-            const response = await fetch(url, {
-                signal: controller.signal
-            });
-            clearTimeout(timeoutId);
-            
-            console.log('🔍 Comments fetch response:', {
-                ok: response.ok,
-                status: response.status,
-                statusText: response.statusText,
-                url: response.url
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Failed to load Instagram comments: ${response.status} ${response.statusText}`);
+            // Use DataManager's comments if available (loaded via File System Access API)
+            if (dataManager && dataManager.comments && dataManager.comments.length > 0) {
+                console.log('🔄 Using comments from DataManager (File System Access API)');
+                this.allComments = dataManager.comments;
+                console.log(`✅ Loaded ${this.allComments.length} comments from DataManager`);
+            } else {
+                console.warn('⚠️ No DataManager or comments available, cannot load modal comments');
+                return;
             }
             
-            const commentsData = await response.json();
-            console.log('🔍 Comments data structure:', {
-                type: typeof commentsData,
-                isArray: Array.isArray(commentsData),
-                postCount: Object.keys(commentsData).length,
-                firstFewPosts: Object.keys(commentsData).slice(0, 5)
-            });
-            
-            let totalComments = 0;
-            
-            // Convert the object structure to flat array
-            Object.entries(commentsData).forEach(([postId, comments], index) => {
-                if (Array.isArray(comments)) {
-                    console.log(`🔍 Post ${postId}: ${comments.length} comments`);
-                    totalComments += comments.length;
-                    
-                    comments.forEach(comment => {
-                        this.allComments.push({
-                            ...comment,
-                            video_id: postId,
-                            video_title: '@jonno.otto Instagram Post',
-                            // Normalize date field
-                            published_at: comment.published_at || comment.commentAt,
-                            // Normalize text field  
-                            text: comment.text || comment.content,
-                            // Normalize like count
-                            like_count: comment.like_count || comment.reactionsCount || 0
-                        });
-                    });
-                } else {
-                    console.warn(`⚠️ Post ${postId} comments is not an array:`, comments);
-                }
-            });
-            
-            console.log(`📊 COMMENTS LOADED: ${this.allComments.length} total from ${Object.keys(commentsData).length} posts`);
+            console.log(`📊 COMMENTS LOADED: ${this.allComments.length} total from DataManager`);
             console.log('🔍 First few comments:', this.allComments.slice(0, 3));
             
             console.log('🔄 Applying filters and rendering...');
