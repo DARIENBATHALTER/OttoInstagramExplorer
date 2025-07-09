@@ -2656,7 +2656,9 @@ class ArchiveExplorer {
             console.log('🔍 Preloaded word freq:', this.preloadedWordFreq?.length, 'items');
             
             // Render preloaded analytics content immediately
-            this.renderPreloadedAnalytics();
+            // Pass current video ID if we're in single post view
+            const videoId = this.currentView === 'video-detail' && this.currentVideo ? this.currentVideo.video_id : null;
+            this.renderPreloadedAnalytics(videoId);
         });
         console.log('✅ Modal event listener registered');
         
@@ -2679,9 +2681,15 @@ class ArchiveExplorer {
     /**
      * Render preloaded analytics content when modal opens
      */
-    renderPreloadedAnalytics() {
+    renderPreloadedAnalytics(videoId = null) {
         try {
             console.log('🎨 RENDERING PRELOADED ANALYTICS...');
+            
+            // If we're in single post view, regenerate analytics for this post only
+            if (videoId) {
+                console.log(`🔄 Regenerating analytics for single post: ${videoId}`);
+                this.utAnalytics.generateAnalyticsFromComments(videoId);
+            }
             
             // Get container elements
             const containers = {

@@ -197,7 +197,7 @@ class UTAnalytics {
     /**
      * Generate analytics from real comments data
      */
-    generateAnalyticsFromComments() {
+    generateAnalyticsFromComments(videoId = null) {
         console.log('🔄 Generating analytics from real comments...');
         
         if (!this.dataManager || !this.dataManager.comments || this.dataManager.comments.length === 0) {
@@ -206,8 +206,14 @@ class UTAnalytics {
             return;
         }
         
-        const comments = this.dataManager.comments;
-        console.log(`📊 Analyzing ${comments.length} real comments...`);
+        // Filter comments by video ID if specified (for single post view)
+        let comments = this.dataManager.comments;
+        if (videoId) {
+            comments = this.dataManager.comments.filter(comment => comment.video_id === videoId);
+            console.log(`📊 Analyzing ${comments.length} comments for video ${videoId} (filtered from ${this.dataManager.comments.length} total)`);
+        } else {
+            console.log(`📊 Analyzing ${comments.length} comments (all videos)`);
+        }
         
         // Keywords for categorization
         const sentimentKeywords = {
