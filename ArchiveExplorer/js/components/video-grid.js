@@ -263,6 +263,16 @@ class VideoGridComponent {
             if (mediaUrl) {
                 const mediaInfo = this.instagramDirectoryManager.mediaFiles.get(video.shortcode);
                 
+                // Debug logging for problematic post
+                if (video.shortcode === 'DFN0qAQCe3l') {
+                    console.log('🔍 Debug DFN0qAQCe3l:', {
+                        mediaUrl,
+                        mediaInfo,
+                        hasMediaInfo: !!mediaInfo,
+                        mediaType: mediaInfo?.type
+                    });
+                }
+                
                 if (mediaInfo && mediaInfo.type.startsWith('image/')) {
                     // For images, use the image directly
                     imgElement.src = mediaUrl;
@@ -270,7 +280,11 @@ class VideoGridComponent {
                 } else if (mediaInfo && mediaInfo.type.startsWith('video/')) {
                     // For videos, we need to generate a thumbnail from the video
                     this.generateVideoThumbnail(mediaUrl, imgElement, video.shortcode);
+                } else {
+                    console.warn(`Unknown media type for ${video.shortcode}:`, mediaInfo?.type);
                 }
+            } else {
+                console.warn(`No media URL found for ${video.shortcode}`);
             }
         } catch (error) {
             console.warn(`Failed to load thumbnail for ${video.shortcode}:`, error);
@@ -282,14 +296,27 @@ class VideoGridComponent {
      * Generate thumbnail from video file
      */
     generateVideoThumbnail(videoUrl, imgElement, shortcode) {
+        // Debug logging for problematic post
+        if (shortcode === 'DFN0qAQCe3l') {
+            console.log('🎬 Starting thumbnail generation for DFN0qAQCe3l:', videoUrl);
+        }
+        
         const video = document.createElement('video');
-        video.crossOrigin = 'anonymous';
+        // Don't set crossOrigin for blob URLs
+        if (!videoUrl.startsWith('blob:')) {
+            video.crossOrigin = 'anonymous';
+        }
         video.muted = true;
+        video.preload = 'metadata';
         
         video.addEventListener('loadeddata', () => {
             // Seek to 1 second or 10% of duration, whichever is smaller
             const seekTime = Math.min(1, video.duration * 0.1);
             video.currentTime = seekTime;
+            
+            if (shortcode === 'DFN0qAQCe3l') {
+                console.log('🎬 Video loaded for DFN0qAQCe3l, seeking to:', seekTime);
+            }
         });
         
         video.addEventListener('seeked', () => {
@@ -346,8 +373,11 @@ class VideoGridComponent {
         });
         
         // Add error handler to clean up video element on loading errors
-        video.addEventListener('error', () => {
-            console.warn('Failed to load video for thumbnail generation');
+        video.addEventListener('error', (e) => {
+            console.warn(`Failed to load video for thumbnail generation (${shortcode}):`, e);
+            if (shortcode === 'DFN0qAQCe3l') {
+                console.error('🚨 Error loading DFN0qAQCe3l video:', e, 'Video URL:', videoUrl);
+            }
             video.src = '';
             video.load();
             video.remove();

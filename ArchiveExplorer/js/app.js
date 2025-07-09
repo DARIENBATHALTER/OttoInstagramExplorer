@@ -1388,8 +1388,12 @@ class ArchiveExplorer {
      */
     generateListVideoThumbnail(videoUrl, imgElement) {
         const video = document.createElement('video');
-        video.crossOrigin = 'anonymous';
+        // Don't set crossOrigin for blob URLs
+        if (!videoUrl.startsWith('blob:')) {
+            video.crossOrigin = 'anonymous';
+        }
         video.muted = true;
+        video.preload = 'metadata';
         
         video.addEventListener('loadeddata', () => {
             // Seek to 1 second or 10% of duration, whichever is smaller
