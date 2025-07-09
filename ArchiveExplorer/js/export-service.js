@@ -4,6 +4,7 @@
  */
 class ExportService {
     constructor() {
+        console.log('🚀 ExportService constructor called');
         this.isExporting = false;
         this.isCancelled = false;
         this.exportProgress = {
@@ -12,12 +13,21 @@ class ExportService {
             status: 'Ready'
         };
         this.maxCommentsPerZip = 500; // Much larger with fflate
+        this.iframeReady = false;
         
         // Create iframe-based rendering to completely eliminate screen flashing
-        this.createIframeRenderer();
+        this.createIframeRenderer().then(() => {
+            this.iframeReady = true;
+            console.log('✅ Iframe renderer ready');
+        }).catch(error => {
+            console.error('❌ Failed to create iframe renderer:', error);
+            this.iframeReady = false;
+        });
         
         // Load fflate library
-        this.initializeZipLibrary();
+        this.initializeZipLibrary().catch(error => {
+            console.error('❌ Failed to initialize ZIP library in constructor:', error);
+        });
     }
 
     /**
@@ -39,58 +49,90 @@ class ExportService {
      * Create iframe-based renderer for ZERO screen interference
      */
     createIframeRenderer() {
-        // Remove any existing iframe
-        const existing = document.getElementById('export-iframe');
-        if (existing) {
-            existing.remove();
-        }
+        return new Promise((resolve, reject) => {
+            console.log('🔧 createIframeRenderer called');
+            
+            // Remove any existing iframe
+            const existing = document.getElementById('export-iframe');
+            if (existing) {
+                console.log('🔧 Removing existing iframe');
+                existing.remove();
+            }
 
-        // Create completely isolated iframe
-        this.iframe = document.createElement('iframe');
-        this.iframe.id = 'export-iframe';
-        this.iframe.style.cssText = `
-            position: absolute;
-            left: -9999px;
-            top: -9999px;
-            width: 800px;
-            height: 600px;
-            border: none;
-            visibility: hidden;
-            pointer-events: none;
-            z-index: -9999;
-        `;
-        
-        document.body.appendChild(this.iframe);
-        
-        // Initialize iframe document
-        const doc = this.iframe.contentDocument;
-        doc.open();
-        doc.write(`
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
-                <style>
-                    * {
-                        box-sizing: border-box;
+            // Create completely isolated iframe
+            this.iframe = document.createElement('iframe');
+            this.iframe.id = 'export-iframe';
+            this.iframe.style.cssText = `
+                position: absolute;
+                left: -9999px;
+                top: -9999px;
+                width: 800px;
+                height: 600px;
+                border: none;
+                visibility: hidden;
+                pointer-events: none;
+                z-index: -9999;
+            `;
+            
+            // Wait for iframe to load before trying to access its document
+            this.iframe.onload = () => {
+                console.log('🔧 Iframe loaded');
+                try {
+                    // Initialize iframe document
+                    const doc = this.iframe.contentDocument || this.iframe.contentWindow?.document;
+                    if (!doc) {
+                        console.error('❌ Could not access iframe document after load');
+                        reject(new Error('Could not access iframe document'));
+                        return;
                     }
-                    body { 
-                        margin: 0; 
-                        padding: 0; 
-                        background: white; 
-                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                        width: 100%;
-                        height: 100%;
-                    }
-                </style>
-            </head>
-            <body></body>
-            </html>
-        `);
-        doc.close();
-        
-        console.log('🖼️ Created iframe-based renderer - ZERO screen interference guaranteed');
+                    
+                    doc.open();
+                    doc.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
+                            <style>
+                                * {
+                                    box-sizing: border-box;
+                                }
+                                body { 
+                                    margin: 0; 
+                                    padding: 0; 
+                                    background: white; 
+                                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                    width: 100%;
+                                    height: 100%;
+                                }
+                            </style>
+                        </head>
+                        <body></body>
+                        </html>
+                    `);
+                    doc.close();
+                    
+                    console.log('🖼️ Created iframe-based renderer - ZERO screen interference guaranteed');
+                    console.log('🖼️ Iframe check:', {
+                        iframe: !!this.iframe,
+                        contentDocument: !!doc,
+                        body: !!doc.body
+                    });
+                    resolve();
+                } catch (error) {
+                    console.error('❌ Error initializing iframe document:', error);
+                    reject(error);
+                }
+            };
+            
+            this.iframe.onerror = (error) => {
+                console.error('❌ Iframe failed to load:', error);
+                reject(error);
+            };
+            
+            document.body.appendChild(this.iframe);
+            console.log('🔧 Iframe appended to body');
+        });
     }
 
     /**
@@ -129,25 +171,35 @@ class ExportService {
      */
     async exportSingleCommentWithFormat(comment, format, videoTitle = '') {
         console.log(`📦 exportSingleCommentWithFormat called: format=${format}, author=${comment?.author}`);
+        console.log(`📊 Comment object:`, comment);
+        console.log(`🎬 Video title: ${videoTitle}`);
+        
         try {
             let filename;
             
             switch (format) {
                 case 'comment-only':
                     console.log(`📝 Using comment-only format`);
-                    const html = this.generateCommentHTML(comment, videoTitle);
-                    filename = this.generateFileName(videoTitle, comment.author, comment.text);
-                    await this.generatePNG(html, filename);
+                    const commentTextForFilename = comment.text || comment.content || '';
+                    filename = this.generateFileName(videoTitle, comment.author, commentTextForFilename);
+                    console.log(`📁 Filename: ${filename}`);
+                    console.log(`🎨 Calling generateCommentOnlyCanvas...`);
+                    
+                    // Use canvas-based approach like iPhone method
+                    const blob = await this.generateCommentOnlyCanvas(comment, videoTitle);
+                    this.downloadBlob(blob, `${filename}.png`);
+                    console.log(`✅ PNG generated and downloaded`);
                     break;
                     
                 case 'iphone-dark':
                 case 'iphone-light':
                     console.log(`📱 Using iPhone composite format: ${format}`);
-                    filename = this.generateiPhoneFileName(videoTitle, comment.author, comment.text, format);
+                    const commentTextForIPhone = comment.text || comment.content || '';
+                    filename = this.generateiPhoneFileName(videoTitle, comment.author, commentTextForIPhone, format);
                     
                     // Use the new composite method
-                    const blob = await this.generateiPhoneComposite(comment, format, videoTitle);
-                    this.downloadBlob(blob, `${filename}.png`);
+                    const iPhoneBlob = await this.generateiPhoneComposite(comment, format, videoTitle);
+                    this.downloadBlob(iPhoneBlob, `${filename}.png`);
                     break;
                     
                 default:
@@ -158,7 +210,11 @@ class ExportService {
             
         } catch (error) {
             console.error('❌ Export failed:', error);
-            throw error;
+            console.error('❌ Error stack:', error.stack);
+            // Add more context to the error
+            const enhancedError = new Error(`Failed to export comment as ${format}: ${error.message}`);
+            enhancedError.originalError = error;
+            throw enhancedError;
         }
     }
 
@@ -366,21 +422,24 @@ class ExportService {
                         switch (format) {
                             case 'comment-only':
                                 const html = this.generateCommentHTML(comment, videoTitle);
-                                filename = this.generateFileName(videoTitle, comment.author, comment.text);
+                                const commentTextForFilename = comment.text || comment.content || '';
+                                filename = this.generateFileName(videoTitle, comment.author, commentTextForFilename);
                                 pngBlob = await this.generatePNGBlobIframe(html);
                                 break;
                                 
                             case 'iphone-dark':
                             case 'iphone-light':
                                 console.log(`📱 Generating iPhone composite for format: ${format}`);
-                                filename = this.generateiPhoneFileName(videoTitle, comment.author, comment.text, format);
+                                const commentTextForIPhone = comment.text || comment.content || '';
+                                filename = this.generateiPhoneFileName(videoTitle, comment.author, commentTextForIPhone, format);
                                 pngBlob = await this.generateiPhoneComposite(comment, format, videoTitle);
                                 break;
                                 
                             default:
                                 console.warn(`⚠️ Unknown format: ${format}, falling back to comment-only`);
                                 const htmlFallback = this.generateCommentHTML(comment, videoTitle);
-                                filename = this.generateFileName(videoTitle, comment.author, comment.text);
+                                const commentTextForFallback = comment.text || comment.content || '';
+                                filename = this.generateFileName(videoTitle, comment.author, commentTextForFallback);
                                 pngBlob = await this.generatePNGBlobIframe(htmlFallback);
                         }
                         
@@ -471,22 +530,54 @@ class ExportService {
         return new Promise(async (resolve, reject) => {
             try {
                 console.log('🖼️ Starting PNG generation...');
+                console.log('🖼️ HTML length:', html.length);
+                
+                // Wait for iframe to be ready
+                if (!this.iframeReady) {
+                    console.log('⏳ Waiting for iframe to be ready...');
+                    let attempts = 0;
+                    while (!this.iframeReady && attempts < 20) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        attempts++;
+                    }
+                    if (!this.iframeReady) {
+                        throw new Error('Iframe not ready after 2 seconds');
+                    }
+                }
                 
                 // Get iframe document
-                const doc = this.iframe.contentDocument;
+                const doc = this.iframe.contentDocument || this.iframe.contentWindow?.document;
                 if (!doc) {
+                    console.error('❌ Iframe document not available');
                     throw new Error('Iframe document not available');
                 }
                 
                 doc.body.innerHTML = html;
                 console.log('📄 HTML injected into iframe');
+                console.log('📄 Body innerHTML length:', doc.body.innerHTML.length);
+
+                // Wait a bit for styles to apply
+                await new Promise(resolve => setTimeout(resolve, 50));
 
                 // Find the comment element
-                const commentElement = doc.querySelector('.comment-container') || doc.querySelector('.iphone-frame') || doc.body.firstElementChild;
+                let commentElement = doc.querySelector('.comment-container');
                 if (!commentElement) {
+                    console.log('⚠️ .comment-container not found, trying .iphone-frame');
+                    commentElement = doc.querySelector('.iphone-frame');
+                }
+                if (!commentElement) {
+                    console.log('⚠️ .iphone-frame not found, trying body');
+                    commentElement = doc.body;
+                    console.log('📄 Using entire body as element');
+                }
+                if (!commentElement || !commentElement.children.length) {
+                    console.error('❌ No renderable content found');
+                    console.log('📄 Body children:', doc.body.children.length);
+                    console.log('📄 Body HTML preview:', doc.body.innerHTML.substring(0, 200));
                     throw new Error('No renderable element found');
                 }
                 console.log('🎯 Found element to render:', commentElement.className);
+                console.log('🎯 Element tag:', commentElement.tagName);
 
                 // Wait for any images to load
                 const images = commentElement.getElementsByTagName('img');
@@ -494,21 +585,36 @@ class ExportService {
                 const imagePromises = [];
                 for (let img of images) {
                     if (!img.complete) {
+                        console.log(`⏳ Waiting for image: ${img.src}`);
                         imagePromises.push(new Promise(resolve => { 
-                            img.onload = resolve; 
-                            img.onerror = resolve; 
+                            img.onload = () => {
+                                console.log(`✅ Image loaded: ${img.src}`);
+                                resolve();
+                            }; 
+                            img.onerror = () => {
+                                console.log(`❌ Image failed: ${img.src}`);
+                                resolve();
+                            }; 
                         }));
                     }
                 }
                 await Promise.all(imagePromises);
 
                 // Short delay for rendering
-                await new Promise(resolve => setTimeout(resolve, 100));
+                await new Promise(resolve => setTimeout(resolve, 200));
 
                 console.log('📐 Element dimensions:', commentElement.offsetWidth, 'x', commentElement.offsetHeight);
+                console.log('🔍 html2canvas available:', typeof window.html2canvas);
 
                 // Generate canvas using iframe content (isolated from main window)
-                const canvas = await html2canvas(commentElement, {
+                // Use parent window's html2canvas since it's not loaded in iframe
+                if (!window.html2canvas) {
+                    console.error('❌ html2canvas library not available!');
+                    throw new Error('html2canvas library not loaded');
+                }
+                
+                console.log('📸 Calling html2canvas...');
+                const canvas = await window.html2canvas(commentElement, {
                     useCORS: true,
                     allowTaint: true,
                     backgroundColor: '#ffffff',
@@ -521,21 +627,24 @@ class ExportService {
                 console.log('🎨 Canvas generated:', canvas.width, 'x', canvas.height);
 
                 // Convert to blob
+                console.log('🔄 Converting canvas to blob...');
                 canvas.toBlob(blob => {
-                    console.log('📦 Blob created:', blob ? `${blob.size} bytes` : 'null');
+                    console.log('📦 Blob callback fired, blob:', blob ? `${blob.size} bytes` : 'null');
                     if (blob && blob.size > 0) {
+                        console.log('✅ Valid blob created, resolving promise');
                         resolve(blob);
                     } else {
+                        console.error('❌ Invalid blob received');
                         reject(new Error('Failed to generate PNG - invalid blob'));
                     }
-                }, 'image/png');
+                }, 'image/png', 1.0);
 
             } catch (error) {
                 console.error('PNG generation error:', error);
                 reject(error);
             } finally {
                 // Clear iframe content
-                if (this.iframe.contentDocument) {
+                if (this.iframe?.contentDocument) {
                     this.iframe.contentDocument.body.innerHTML = '';
                 }
             }
@@ -546,14 +655,23 @@ class ExportService {
      * Generate PNG from HTML and download it
      */
     async generatePNG(html, filename) {
-        const blob = await this.generatePNGBlobIframe(html);
-        this.downloadBlob(blob, `${filename}.png`);
+        console.log('🎯 generatePNG called with filename:', filename);
+        try {
+            const blob = await this.generatePNGBlobIframe(html);
+            console.log('🎯 Got blob from generatePNGBlobIframe:', blob?.size || 'null');
+            this.downloadBlob(blob, `${filename}.png`);
+        } catch (error) {
+            console.error('❌ generatePNG failed:', error);
+            throw error;
+        }
     }
 
     /**
      * Generate HTML for a comment in YouTube style
      */
     generateCommentHTML(comment, videoTitle = '') {
+        console.log('🎨 generateCommentHTML called with comment:', comment);
+        
         // Get random avatar for this user, or fall back to initials
         const randomAvatarUrl = window.avatarService.getAvatarForUser(comment.author);
         const avatarColor = window.avatarService.generateAvatarColor(comment.author);
@@ -562,8 +680,12 @@ class ExportService {
         const likeDisplay = this.formatLikes(comment.like_count);
         const heartIcon = comment.channel_owner_liked ? '❤️' : '';
         
+        // Handle both .text and .content properties
+        const commentTextRaw = comment.text || comment.content || '';
+        console.log('🎨 Comment text raw:', commentTextRaw);
+        
         // Escape HTML
-        const commentText = this.escapeHTML(comment.text);
+        const commentText = this.escapeHTML(commentTextRaw);
         const authorName = this.escapeHTML(comment.author);
         const videoTitleEscaped = this.escapeHTML(videoTitle);
 
@@ -819,6 +941,57 @@ class ExportService {
     }
 
     /**
+     * Generate comment-only canvas for export (no iPhone frame, just the comment)
+     */
+    async generateCommentOnlyCanvas(comment, videoTitle = '') {
+        console.log('📝 generateCommentOnlyCanvas called');
+        
+        // Create a canvas sized for just the comment
+        const canvas = document.createElement('canvas');
+        canvas.width = 600;  // Fixed width for comment
+        canvas.height = 200; // Will adjust based on content
+        const ctx = canvas.getContext('2d');
+        
+        try {
+            // Fill background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw the comment
+            const commentHeight = await this.drawCommentOnly(ctx, comment, 20, false); // Start at y=20, light mode
+            
+            // Resize canvas to fit content
+            const finalCanvas = document.createElement('canvas');
+            finalCanvas.width = canvas.width;
+            finalCanvas.height = commentHeight + 40; // Add padding
+            const finalCtx = finalCanvas.getContext('2d');
+            
+            // Fill final background
+            finalCtx.fillStyle = '#ffffff';
+            finalCtx.fillRect(0, 0, finalCanvas.width, finalCanvas.height);
+            
+            // Copy the comment content
+            finalCtx.drawImage(canvas, 0, 0);
+            
+            // Convert to blob
+            return new Promise((resolve, reject) => {
+                finalCanvas.toBlob(blob => {
+                    if (blob && blob.size > 0) {
+                        console.log('✅ Comment-only canvas generated successfully');
+                        resolve(blob);
+                    } else {
+                        reject(new Error('Failed to generate comment-only canvas'));
+                    }
+                }, 'image/png');
+            });
+            
+        } catch (error) {
+            console.error('Error creating comment-only canvas:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Generate iPhone screenshot composite for export
      */
     async generateiPhoneComposite(comment, format, videoTitle = '') {
@@ -897,7 +1070,11 @@ class ExportService {
             }
             
             // 3. Load and draw the iPhone UI overlay
-            const overlayPath = isDark ? 'assets/blankdarkmode.png' : 'assets/blanklightmode.png';
+            // Use absolute paths based on the full path provided
+            const basePath = '/Volumes/SSD/SocialProjectMasters/jonno.otto_ig_explorer/InstaArchiveExplorer/';
+            const overlayPath = isDark ? 
+                basePath + 'ArchiveExplorer/assets/blankdarkmode.png' : 
+                basePath + 'ArchiveExplorer/assets/blanklightmode.png';
             console.log(`📱 Loading iPhone template: ${overlayPath} (format: ${format}, isDark: ${isDark})`);
             
             try {
@@ -906,10 +1083,24 @@ class ExportService {
                 ctx.drawImage(overlay, 0, 0, canvas.width, canvas.height);
             } catch (error) {
                 console.error(`❌ Failed to load iPhone template: ${overlayPath}`, error);
-                console.log(`🔄 Creating fallback iPhone frame...`);
+                console.log(`🔄 Trying relative path...`);
                 
-                // Create a basic iPhone frame as fallback
-                this.drawFallbackiPhoneFrame(ctx, isDark);
+                // Try relative path as fallback
+                const relativeOverlayPath = isDark ? 
+                    'ArchiveExplorer/assets/blankdarkmode.png' : 
+                    'ArchiveExplorer/assets/blanklightmode.png';
+                
+                try {
+                    const overlay = await this.loadImage(relativeOverlayPath);
+                    console.log(`✅ Successfully loaded iPhone template with relative path: ${relativeOverlayPath}`);
+                    ctx.drawImage(overlay, 0, 0, canvas.width, canvas.height);
+                } catch (error2) {
+                    console.error(`❌ Failed to load iPhone template with relative path: ${relativeOverlayPath}`, error2);
+                    console.log(`🔄 Creating fallback iPhone frame...`);
+                    
+                    // Create a basic iPhone frame as fallback
+                    this.drawFallbackiPhoneFrame(ctx, isDark);
+                }
             }
             
             // 3. Draw the comment at 40% height  
@@ -1043,6 +1234,138 @@ class ExportService {
     }
     
     /**
+     * Draw comment for comment-only export (simplified, no background overlay)
+     */
+    async drawCommentOnly(ctx, comment, yPosition, isDark) {
+        const avatarColor = window.avatarService.generateAvatarColor(comment.author);
+        const firstLetter = comment.author[0]?.toUpperCase() || 'U';
+        const timeAgo = this.formatTimeAgo(comment.published_at);
+        const authorName = comment.author;
+        const commentText = comment.text || comment.content || '';
+        
+        // Comment positioning (simplified for comment-only)
+        const leftMargin = 20;
+        const rightMargin = 20;
+        const avatarSize = 40;
+        const avatarMargin = 16;
+        
+        // Calculate text width
+        const textStartX = leftMargin + avatarSize + avatarMargin;
+        const maxTextWidth = ctx.canvas.width - textStartX - rightMargin;
+        
+        // Colors for light mode (since this is comment-only)
+        const textColor = '#000000';
+        const metaColor = '#8e8e8e';
+        
+        // Set up text for measuring
+        ctx.font = '16px -apple-system, BlinkMacSystemFont, sans-serif';
+        
+        // Wrap text
+        const commentLines = this.wrapText(ctx, `${authorName} ${commentText}`, maxTextWidth);
+        const lineHeight = 20;
+        
+        // Draw avatar 
+        const avatarCenterX = leftMargin + avatarSize / 2;
+        const avatarCenterY = yPosition + avatarSize / 2;
+        
+        // Try to load and draw the actual avatar image
+        const randomAvatarUrl = window.avatarService.getAvatarForUser(comment.author);
+        let avatarDrawn = false;
+        
+        if (randomAvatarUrl) {
+            try {
+                const avatarImg = await this.loadImage(randomAvatarUrl);
+                
+                // Create circular clip path
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(avatarCenterX, avatarCenterY, avatarSize / 2, 0, Math.PI * 2);
+                ctx.clip();
+                
+                // Draw the avatar image
+                ctx.drawImage(avatarImg, 
+                    avatarCenterX - avatarSize / 2, 
+                    avatarCenterY - avatarSize / 2, 
+                    avatarSize, 
+                    avatarSize);
+                
+                ctx.restore();
+                avatarDrawn = true;
+            } catch (error) {
+                console.log(`⚠️ Failed to load avatar image for ${comment.author}, using fallback`);
+            }
+        }
+        
+        // Draw fallback avatar if image failed to load
+        if (!avatarDrawn) {
+            ctx.fillStyle = avatarColor;
+            ctx.beginPath();
+            ctx.arc(avatarCenterX, avatarCenterY, avatarSize / 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw avatar letter
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(firstLetter, avatarCenterX, avatarCenterY);
+        }
+        
+        // Draw comment text with author name
+        ctx.fillStyle = textColor;
+        ctx.font = '16px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        
+        let currentY = yPosition + 20;
+        let isFirstLine = true;
+        
+        commentLines.forEach((line, index) => {
+            if (isFirstLine) {
+                // First line contains author name - make it bold
+                const authorEndIndex = line.indexOf(' ');
+                if (authorEndIndex > 0) {
+                    const author = line.substring(0, authorEndIndex);
+                    const restOfLine = line.substring(authorEndIndex);
+                    
+                    // Draw author name in bold
+                    ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, sans-serif';
+                    ctx.fillText(author, textStartX, currentY);
+                    
+                    // Measure author width
+                    const authorWidth = ctx.measureText(author).width;
+                    
+                    // Draw rest of line in regular
+                    ctx.font = '16px -apple-system, BlinkMacSystemFont, sans-serif';
+                    ctx.fillText(restOfLine, textStartX + authorWidth, currentY);
+                } else {
+                    ctx.fillText(line, textStartX, currentY);
+                }
+                isFirstLine = false;
+            } else {
+                ctx.fillText(line, textStartX, currentY);
+            }
+            currentY += lineHeight;
+        });
+        
+        // Draw time and likes
+        ctx.fillStyle = metaColor;
+        ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillText(timeAgo, textStartX, currentY + 8);
+        
+        // Add likes if any
+        const likeCount = comment.like_count || 0;
+        if (likeCount > 0) {
+            const timeWidth = ctx.measureText(timeAgo).width;
+            const likesText = `${this.formatLikes(likeCount)} likes`;
+            ctx.fillText(likesText, textStartX + timeWidth + 20, currentY + 8);
+        }
+        
+        // Return the total height used
+        return currentY + 20;
+    }
+
+    /**
      * Draw comment on canvas
      */
     async drawComment(ctx, comment, yPosition, isDark) {
@@ -1050,7 +1373,7 @@ class ExportService {
         const firstLetter = comment.author[0]?.toUpperCase() || 'U';
         const timeAgo = this.formatTimeAgo(comment.published_at);
         const authorName = comment.author;
-        const commentText = comment.text || comment.content;
+        const commentText = comment.text || comment.content || '';
         
         // Instagram-style comment positioning
         const leftMargin = 60;
