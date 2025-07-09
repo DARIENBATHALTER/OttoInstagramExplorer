@@ -958,12 +958,14 @@ class ExportService {
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             // Draw the comment
-            const commentHeight = await this.drawCommentOnly(ctx, comment, 20, false); // Start at y=20, light mode
+            const topPadding = 20;
+            const bottomPadding = 10; // Reduced bottom padding
+            const commentHeight = await this.drawCommentOnly(ctx, comment, topPadding, false); // Start at y=20, light mode
             
             // Resize canvas to fit content
             const finalCanvas = document.createElement('canvas');
             finalCanvas.width = canvas.width;
-            finalCanvas.height = commentHeight + 40; // Add padding
+            finalCanvas.height = commentHeight + bottomPadding; // Add less padding at bottom
             const finalCtx = finalCanvas.getContext('2d');
             
             // Fill final background

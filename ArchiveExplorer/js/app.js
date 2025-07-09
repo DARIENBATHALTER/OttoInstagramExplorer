@@ -30,6 +30,9 @@ class ArchiveExplorer {
         // List view sorting state
         this.currentListSort = { field: 'date', direction: 'desc' };
         
+        // Single-post analytics cache
+        this.singlePostAnalyticsCache = new Map();
+        
         this.initializeApp();
     }
 
@@ -1046,7 +1049,7 @@ class ArchiveExplorer {
             if (this.elements.commentsList) {
                 this.commentListComponent = new CommentListComponent(this.elements.commentsList, this.exportService);
                 // Set the export callback to handle format selection
-                this.commentListComponent.onCommentExport = (commentId, format = 'comment-only') => {
+                this.commentListComponent.onCommentExport = async (commentId, format = 'comment-only') => {
                     console.log(`🎯 Export callback triggered: commentId=${commentId}, format=${format}`);
                     const comment = this.findCommentById(commentId);
                     console.log(`🔍 Found comment:`, !!comment, comment?.author);
@@ -1056,7 +1059,7 @@ class ArchiveExplorer {
                         console.log(`📹 Video title: ${videoTitle}`);
                         console.log(`🚀 Calling exportSingleCommentWithFormat...`);
                         try {
-                            this.exportService.exportSingleCommentWithFormat(comment, format, videoTitle);
+                            await this.exportService.exportSingleCommentWithFormat(comment, format, videoTitle);
                         } catch (error) {
                             console.error(`❌ Export error:`, error);
                         }
@@ -1702,6 +1705,12 @@ class ArchiveExplorer {
             this.elements.videoListView.style.display = 'none';
             this.elements.videoDetailView.style.display = 'block';
             
+            // Hide channel statistics on single post view
+            const channelStatsEl = document.getElementById('channelStats');
+            if (channelStatsEl) {
+                channelStatsEl.style.display = 'none';
+            }
+            
             // Add single post mode class to remove app padding
             document.getElementById('app').classList.add('single-post-mode');
             
@@ -1846,15 +1855,456 @@ class ArchiveExplorer {
         });
         document.getElementById(`${tabName}Tab`).classList.add('active');
         
-        // Re-render word cloud when insights tab is activated
-        if (tabName === 'insights') {
-            setTimeout(() => {
-                if (this.preloadedWordFreq) {
-                    console.log('🔄 Re-rendering word cloud after tab switch...');
-                    this.renderAnalyticsWordCloud(this.preloadedWordFreq);
-                }
-            }, 50); // Small delay to ensure tab is visible
+        // Load content for the activated tab
+        setTimeout(() => {
+            this.loadSinglePostAnalyticsTab(tabName);
+        }, 50); // Small delay to ensure tab is visible
+    }
+    
+    /**
+     * Load content for a specific single-post analytics tab
+     */
+    async loadSinglePostAnalyticsTab(tabName) {
+        console.log(`🔄 Loading single-post analytics tab: ${tabName}`);
+        
+        if (!this.currentVideo) {
+            console.warn('No current video available for analytics');
+            return;
         }
+        
+        try {
+            const videoId = this.currentVideo.shortcode || this.currentVideo.video_id;
+            
+            // Check if we have cached analytics
+            const cachedAnalytics = this.singlePostAnalyticsCache.get(videoId);
+            
+            if (cachedAnalytics) {
+                console.log('✨ Using cached analytics for instant display');
+                
+                switch (tabName) {
+                    case 'frequent':
+                        // Use cached word frequency or fall back to preloaded
+                        const wordFreq = cachedAnalytics.wordFreq || this.preloadedWordFreq;
+                        if (wordFreq) {
+                            this.renderAnalyticsWordCloud(wordFreq);
+                        }
+                        break;
+                        
+                    case 'sentiment':
+                        // Render cached sentiment data
+                        this.renderCachedSentiment(cachedAnalytics.sentiment);
+                        break;
+                        
+                    case 'engagement':
+                        // Render cached engagement data
+                        this.renderCachedEngagement(cachedAnalytics.engagement);
+                        break;
+                        
+                    case 'health':
+                        // Render cached health topics
+                        this.renderCachedHealthTopics(cachedAnalytics.healthTopics);
+                        break;
+                        
+                    default:
+                        console.log(`⚠️ Unknown single-post analytics tab: ${tabName}`);
+                }
+            } else {
+                // Fall back to real-time computation if no cache
+                console.log('⚠️ No cached analytics, computing in real-time...');
+                
+                // Get comments for current video
+                const comments = await this.dataManager.getAllComments(videoId, {});
+                const flatComments = this.flattenComments(comments);
+                
+                switch (tabName) {
+                    case 'frequent':
+                        // Re-render word cloud for current video
+                        if (this.preloadedWordFreq) {
+                            console.log('🔄 Re-rendering word cloud after tab switch...');
+                            this.renderAnalyticsWordCloud(this.preloadedWordFreq);
+                        }
+                        break;
+                        
+                    case 'sentiment':
+                        // Render simplified sentiment analysis
+                        this.renderSinglePostSentiment(flatComments);
+                        break;
+                        
+                    case 'engagement':
+                        // Render simplified engagement metrics
+                        this.renderSinglePostEngagement(flatComments);
+                        break;
+                        
+                    case 'health':
+                        // Render simplified health topics
+                        this.renderSinglePostHealthTopics(flatComments);
+                        break;
+                }
+            }
+        } catch (error) {
+            console.error('❌ Error loading single-post analytics tab:', error);
+        }
+    }
+    
+    /**
+     * Render cached sentiment analysis
+     */
+    renderCachedSentiment(sentimentData) {
+        const container = document.getElementById('sentimentAnalysis');
+        if (!container) return;
+        
+        const total = Object.values(sentimentData).reduce((sum, data) => sum + data.count, 0);
+        
+        const html = `
+            <div class="sentiment-grid-simple">
+                ${Object.entries(sentimentData).map(([type, data]) => {
+                    const percentage = total > 0 ? Math.round((data.count / total) * 100) : 0;
+                    const icon = this.getSentimentIcon(type);
+                    const color = this.getSentimentColor(type);
+                    
+                    return `
+                        <div class="sentiment-item-simple">
+                            <div class="sentiment-icon" style="color: ${color};">${icon}</div>
+                            <div class="sentiment-label">${this.capitalizeSentiment(type)}</div>
+                            <div class="sentiment-value">${data.count}</div>
+                            <div class="sentiment-percentage">${percentage}%</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <div class="sentiment-summary mt-3">
+                <small class="text-muted">Analyzed for emotional tone</small>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+    
+    /**
+     * Render cached engagement metrics
+     */
+    renderCachedEngagement(engagementData) {
+        const container = document.getElementById('analyticsEngagement');
+        if (!container) return;
+        
+        const html = `
+            <div class="engagement-metrics">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <div class="metric-icon">💬</div>
+                            <div class="metric-value">${engagementData.totalComments}</div>
+                            <div class="metric-label">Comments</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <div class="metric-icon">↩️</div>
+                            <div class="metric-value">${engagementData.replies}</div>
+                            <div class="metric-label">Replies</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <div class="metric-icon">❓</div>
+                            <div class="metric-value">${engagementData.questions}</div>
+                            <div class="metric-label">Questions</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <div class="metric-icon">📝</div>
+                            <div class="metric-value">${engagementData.avgLength}</div>
+                            <div class="metric-label">Avg Length</div>
+                        </div>
+                    </div>
+                </div>
+                
+                ${engagementData.topLiked && engagementData.topLiked.length > 0 ? `
+                    <div class="top-comments mt-4">
+                        <h6 class="mb-3">Most Liked Comments</h6>
+                        ${engagementData.topLiked.map(comment => `
+                            <div class="top-comment-item">
+                                <div class="comment-text">"${this.truncateText(comment.text || comment.content || '', 100)}"</div>
+                                <div class="comment-likes">❤️ ${comment.like_count || 0} likes</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+    
+    /**
+     * Render cached health topics
+     */
+    renderCachedHealthTopics(healthData) {
+        const container = document.getElementById('analyticsHealth');
+        if (!container) return;
+        
+        const topicCounts = healthData.counts || {};
+        const topicExamples = healthData.examples || {};
+        
+        // Sort topics by frequency
+        const sortedTopics = Object.entries(topicCounts)
+            .sort(([,a], [,b]) => b - a)
+            .filter(([,count]) => count > 0);
+        
+        const html = `
+            <div class="health-topics-simple">
+                ${sortedTopics.length > 0 ? `
+                    ${sortedTopics.map(([topic, count]) => `
+                        <div class="health-topic-item">
+                            <div class="topic-header">
+                                <span class="topic-name">${topic}</span>
+                                <span class="topic-count">${count} mentions</span>
+                            </div>
+                            ${topicExamples[topic] && topicExamples[topic].length > 0 ? `
+                                <div class="topic-example">
+                                    <small class="text-muted">"${this.truncateText(topicExamples[topic][0], 80)}"</small>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('')}
+                ` : `
+                    <div class="no-health-topics">
+                        <div class="text-muted text-center py-4">
+                            <i class="bi bi-heart-pulse" style="font-size: 2rem; opacity: 0.5;"></i>
+                            <p class="mt-2 mb-0">No specific health topics mentioned</p>
+                        </div>
+                    </div>
+                `}
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+    
+    /**
+     * Render simplified sentiment analysis for single post
+     */
+    renderSinglePostSentiment(comments) {
+        const container = document.getElementById('sentimentAnalysis');
+        if (!container) return;
+        
+        // Simple sentiment categorization
+        const sentiments = {
+            positive: { count: 0, keywords: ['amazing', 'love', 'thank', 'great', 'wonderful', 'fantastic', 'incredible', 'awesome', 'perfect', 'blessed', 'helpful', 'works', 'healed'] },
+            curious: { count: 0, keywords: ['how', 'what', 'when', 'where', 'why', 'can you', 'could you', '?', 'explain', 'tell me'] },
+            supportive: { count: 0, keywords: ['support', 'agree', 'yes', 'absolutely', 'definitely', 'same here', 'me too', 'praying', 'hope'] },
+            skeptical: { count: 0, keywords: ['doubt', 'fake', 'dangerous', 'unsafe', 'proven', 'scientific', 'risk', 'doctor', 'medical'] }
+        };
+        
+        const total = comments.length;
+        
+        comments.forEach(comment => {
+            const text = (comment.content || comment.text || '').toLowerCase();
+            
+            Object.keys(sentiments).forEach(sentiment => {
+                sentiments[sentiment].keywords.forEach(keyword => {
+                    if (text.includes(keyword)) {
+                        sentiments[sentiment].count++;
+                    }
+                });
+            });
+        });
+        
+        const html = `
+            <div class="sentiment-grid-simple">
+                ${Object.entries(sentiments).map(([type, data]) => {
+                    const percentage = total > 0 ? Math.round((data.count / total) * 100) : 0;
+                    const icon = this.getSentimentIcon(type);
+                    const color = this.getSentimentColor(type);
+                    
+                    return `
+                        <div class="sentiment-item-simple">
+                            <div class="sentiment-icon" style="color: ${color};">${icon}</div>
+                            <div class="sentiment-label">${this.capitalizeSentiment(type)}</div>
+                            <div class="sentiment-value">${data.count}</div>
+                            <div class="sentiment-percentage">${percentage}%</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            <div class="sentiment-summary mt-3">
+                <small class="text-muted">Analyzed ${total} comments for emotional tone</small>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+    
+    /**
+     * Render simplified engagement metrics for single post
+     */
+    renderSinglePostEngagement(comments) {
+        const container = document.getElementById('analyticsEngagement');
+        if (!container) return;
+        
+        // Calculate engagement metrics
+        const metrics = {
+            totalComments: comments.length,
+            replies: comments.filter(c => c.is_reply).length,
+            questions: comments.filter(c => (c.text || c.content || '').includes('?')).length,
+            avgLength: comments.length > 0 ? Math.round(comments.reduce((sum, c) => sum + (c.text || c.content || '').length, 0) / comments.length) : 0,
+            topLiked: comments.filter(c => (c.like_count || 0) > 0).sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 3)
+        };
+        
+        const html = `
+            <div class="engagement-metrics">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <div class="metric-icon">💬</div>
+                            <div class="metric-value">${metrics.totalComments}</div>
+                            <div class="metric-label">Comments</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <div class="metric-icon">↩️</div>
+                            <div class="metric-value">${metrics.replies}</div>
+                            <div class="metric-label">Replies</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <div class="metric-icon">❓</div>
+                            <div class="metric-value">${metrics.questions}</div>
+                            <div class="metric-label">Questions</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="metric-card">
+                            <div class="metric-icon">📝</div>
+                            <div class="metric-value">${metrics.avgLength}</div>
+                            <div class="metric-label">Avg Length</div>
+                        </div>
+                    </div>
+                </div>
+                
+                ${metrics.topLiked.length > 0 ? `
+                    <div class="top-comments mt-4">
+                        <h6 class="mb-3">Most Liked Comments</h6>
+                        ${metrics.topLiked.map(comment => `
+                            <div class="top-comment-item">
+                                <div class="comment-text">"${this.truncateText(comment.text || comment.content || '', 100)}"</div>
+                                <div class="comment-likes">❤️ ${comment.like_count || 0} likes</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+    
+    /**
+     * Render simplified health topics for single post
+     */
+    renderSinglePostHealthTopics(comments) {
+        const container = document.getElementById('analyticsHealth');
+        if (!container) return;
+        
+        // Health topic keywords
+        const healthTopics = {
+            'Skin & Beauty': ['skin', 'face', 'acne', 'wrinkles', 'beauty', 'hair', 'complexion', 'glow', 'clear'],
+            'Digestive Health': ['digestion', 'stomach', 'gut', 'bloating', 'ibs', 'constipation', 'liver'],
+            'Energy & Vitality': ['energy', 'fatigue', 'tired', 'vitality', 'stamina', 'strength', 'boost'],
+            'Immune System': ['immune', 'cold', 'flu', 'infection', 'illness', 'sick', 'antibodies']
+        };
+        
+        const topicCounts = {};
+        const topicExamples = {};
+        
+        Object.keys(healthTopics).forEach(topic => {
+            topicCounts[topic] = 0;
+            topicExamples[topic] = [];
+        });
+        
+        comments.forEach(comment => {
+            const text = (comment.text || comment.content || '').toLowerCase();
+            
+            Object.entries(healthTopics).forEach(([topic, keywords]) => {
+                keywords.forEach(keyword => {
+                    if (text.includes(keyword)) {
+                        topicCounts[topic]++;
+                        if (topicExamples[topic].length < 2) {
+                            topicExamples[topic].push(comment.text || comment.content || '');
+                        }
+                    }
+                });
+            });
+        });
+        
+        // Sort topics by frequency
+        const sortedTopics = Object.entries(topicCounts)
+            .sort(([,a], [,b]) => b - a)
+            .filter(([,count]) => count > 0);
+        
+        const html = `
+            <div class="health-topics-simple">
+                ${sortedTopics.length > 0 ? `
+                    ${sortedTopics.map(([topic, count]) => `
+                        <div class="health-topic-item">
+                            <div class="topic-header">
+                                <span class="topic-name">${topic}</span>
+                                <span class="topic-count">${count} mentions</span>
+                            </div>
+                            ${topicExamples[topic].length > 0 ? `
+                                <div class="topic-example">
+                                    <small class="text-muted">"${this.truncateText(topicExamples[topic][0], 80)}"</small>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('')}
+                ` : `
+                    <div class="no-health-topics">
+                        <div class="text-muted text-center py-4">
+                            <i class="bi bi-heart-pulse" style="font-size: 2rem; opacity: 0.5;"></i>
+                            <p class="mt-2 mb-0">No specific health topics mentioned</p>
+                        </div>
+                    </div>
+                `}
+            </div>
+        `;
+        
+        container.innerHTML = html;
+    }
+    
+    /**
+     * Helper methods for single-post analytics
+     */
+    getSentimentIcon(type) {
+        const icons = {
+            positive: '😊',
+            curious: '🤔',
+            supportive: '🙏',
+            skeptical: '😕'
+        };
+        return icons[type] || '💭';
+    }
+    
+    getSentimentColor(type) {
+        const colors = {
+            positive: '#28a745',
+            curious: '#17a2b8',
+            supportive: '#6f42c1',
+            skeptical: '#dc3545'
+        };
+        return colors[type] || '#6c757d';
+    }
+    
+    capitalizeSentiment(text) {
+        return text.charAt(0).toUpperCase() + text.slice(1);
+    }
+    
+    truncateText(text, maxLength) {
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
     }
     
     /**
@@ -1875,6 +2325,14 @@ class ArchiveExplorer {
             // Load frequent words (keep word cloud)
             const wordFreq = this.analyzeWordFrequency(flatComments);
             this.renderAnalyticsWordCloud(wordFreq);
+            
+            // Load content for the currently active tab
+            const activeTab = document.querySelector('.analytics-tab.active');
+            if (activeTab) {
+                const tabName = activeTab.getAttribute('data-tab');
+                console.log(`📊 Loading active analytics tab: ${tabName}`);
+                await this.loadSinglePostAnalyticsTab(tabName);
+            }
             
             // Initialize UT Analytics
             if (!this.utAnalytics) {
@@ -1966,19 +2424,14 @@ class ArchiveExplorer {
             }
             
             // Preload word cloud data
-            console.log('📝 TEMPORARILY skipping word cloud data to debug freezing...');
-            // TODO: Re-enable once freezing is resolved
-            // await this.preloadWordCloudData();
+            console.log('📝 Preloading word cloud data...');
+            await this.preloadWordCloudData();
+            console.log('✅ Word cloud data preloaded');
             
-            // Use sample word frequency data instead
-            this.preloadedWordFreq = [
-                { word: 'great', count: 156 },
-                { word: 'love', count: 134 },
-                { word: 'amazing', count: 98 },
-                { word: 'thank', count: 87 },
-                { word: 'help', count: 76 }
-            ];
-            console.log('✅ Sample word frequency data loaded');
+            // Preload single-post analytics cache
+            console.log('📊 Preloading single-post analytics cache...');
+            await this.preloadSinglePostAnalytics();
+            console.log('✅ Single-post analytics cache ready');
             
             console.log('✅ ANALYTICS DATA PRELOAD COMPLETE');
             
@@ -2038,6 +2491,136 @@ class ArchiveExplorer {
                 { word: 'help', count: 76 }
             ];
         }
+    }
+    
+    /**
+     * Preload single-post analytics data
+     */
+    async preloadSinglePostAnalytics() {
+        try {
+            if (!this.dataManager || !this.dataManager.posts) {
+                console.warn('⚠️ No posts available for analytics preloading');
+                return;
+            }
+            
+            console.log(`📊 Precomputing analytics for ${this.dataManager.posts.length} posts...`);
+            
+            // Process posts in batches to avoid blocking
+            const batchSize = 10;
+            const posts = this.dataManager.posts;
+            
+            for (let i = 0; i < posts.length; i += batchSize) {
+                const batch = posts.slice(i, i + batchSize);
+                
+                await Promise.all(batch.map(async (post) => {
+                    try {
+                        // Get comments for this post
+                        const comments = await this.dataManager.getAllComments(post.shortcode || post.video_id, {});
+                        const flatComments = this.flattenComments(comments);
+                        
+                        if (flatComments.length > 0) {
+                            // Precompute analytics for this post
+                            const analytics = this.computeSinglePostAnalytics(flatComments);
+                            this.singlePostAnalyticsCache.set(post.shortcode || post.video_id, analytics);
+                        }
+                    } catch (error) {
+                        console.warn(`⚠️ Error precomputing analytics for post ${post.shortcode}:`, error);
+                    }
+                }));
+                
+                // Brief pause between batches
+                if (i + batchSize < posts.length) {
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
+            }
+            
+            console.log(`✅ Precomputed analytics for ${this.singlePostAnalyticsCache.size} posts`);
+            
+        } catch (error) {
+            console.error('❌ Error preloading single-post analytics:', error);
+        }
+    }
+    
+    /**
+     * Compute analytics for a single post
+     */
+    computeSinglePostAnalytics(comments) {
+        const analytics = {
+            sentiment: {},
+            engagement: {},
+            healthTopics: {},
+            wordFreq: []
+        };
+        
+        // Compute sentiment
+        const sentiments = {
+            positive: { count: 0, keywords: ['amazing', 'love', 'thank', 'great', 'wonderful', 'fantastic', 'incredible', 'awesome', 'perfect', 'blessed', 'helpful', 'works', 'healed'] },
+            curious: { count: 0, keywords: ['how', 'what', 'when', 'where', 'why', 'can you', 'could you', '?', 'explain', 'tell me'] },
+            supportive: { count: 0, keywords: ['support', 'agree', 'yes', 'absolutely', 'definitely', 'same here', 'me too', 'praying', 'hope'] },
+            skeptical: { count: 0, keywords: ['doubt', 'fake', 'dangerous', 'unsafe', 'proven', 'scientific', 'risk', 'doctor', 'medical'] }
+        };
+        
+        comments.forEach(comment => {
+            const text = (comment.content || comment.text || '').toLowerCase();
+            Object.keys(sentiments).forEach(sentiment => {
+                sentiments[sentiment].keywords.forEach(keyword => {
+                    if (text.includes(keyword)) {
+                        sentiments[sentiment].count++;
+                    }
+                });
+            });
+        });
+        
+        analytics.sentiment = sentiments;
+        
+        // Compute engagement metrics
+        analytics.engagement = {
+            totalComments: comments.length,
+            replies: comments.filter(c => c.is_reply).length,
+            questions: comments.filter(c => (c.text || c.content || '').includes('?')).length,
+            avgLength: comments.length > 0 ? Math.round(comments.reduce((sum, c) => sum + (c.text || c.content || '').length, 0) / comments.length) : 0,
+            topLiked: comments.filter(c => (c.like_count || 0) > 0).sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 3)
+        };
+        
+        // Compute health topics
+        const healthTopics = {
+            'Skin & Beauty': ['skin', 'face', 'acne', 'wrinkles', 'beauty', 'hair', 'complexion', 'glow', 'clear'],
+            'Digestive Health': ['digestion', 'stomach', 'gut', 'bloating', 'ibs', 'constipation', 'liver'],
+            'Energy & Vitality': ['energy', 'fatigue', 'tired', 'vitality', 'stamina', 'strength', 'boost'],
+            'Immune System': ['immune', 'cold', 'flu', 'infection', 'illness', 'sick', 'antibodies']
+        };
+        
+        const topicCounts = {};
+        const topicExamples = {};
+        
+        Object.keys(healthTopics).forEach(topic => {
+            topicCounts[topic] = 0;
+            topicExamples[topic] = [];
+        });
+        
+        comments.forEach(comment => {
+            const text = (comment.text || comment.content || '').toLowerCase();
+            Object.entries(healthTopics).forEach(([topic, keywords]) => {
+                keywords.forEach(keyword => {
+                    if (text.includes(keyword)) {
+                        topicCounts[topic]++;
+                        if (topicExamples[topic].length < 2) {
+                            topicExamples[topic].push(comment.text || comment.content || '');
+                        }
+                    }
+                });
+            });
+        });
+        
+        analytics.healthTopics = { counts: topicCounts, examples: topicExamples };
+        
+        // Compute word frequency for this post
+        const texts = comments.map(c => c.text || c.content || '').filter(t => t.length > 2);
+        if (texts.length > 0) {
+            analytics.wordFreq = this.analyzeWordFrequency(texts);
+        }
+        
+        return analytics;
     }
     
     /**
@@ -2392,10 +2975,61 @@ class ArchiveExplorer {
      * Load specific analytics tab content
      */
     loadAudienceAnalyticsTab(targetTab) {
-        // Force reload all content to ensure it's visible
-        setTimeout(() => {
-            this.loadAudienceAnalyticsContent();
-        }, 50);
+        console.log(`🔄 Loading audience analytics tab: ${targetTab}`);
+        
+        // Handle specific tab content loading
+        switch (targetTab) {
+            case '#audience-wordcloud':
+            case '#wordcloud':
+                // Render word cloud
+                const wordCloudContainer = document.getElementById('audienceWordCloud');
+                if (wordCloudContainer && this.preloadedWordFreq) {
+                    this.renderAnalyticsWordCloud(this.preloadedWordFreq, wordCloudContainer);
+                }
+                break;
+                
+            case '#audience-sentiment':
+            case '#sentiment':
+                // Render sentiment analysis
+                const sentimentContainer = document.getElementById('audienceSentiment');
+                if (sentimentContainer && this.utAnalytics && this.utAnalytics.analyticsData) {
+                    this.utAnalytics.renderSentimentAnalysis(sentimentContainer);
+                }
+                break;
+                
+            case '#audience-engagement':
+            case '#engagement':
+                // Render engagement patterns
+                const engagementContainer = document.getElementById('audienceEngagement');
+                if (engagementContainer && this.utAnalytics && this.utAnalytics.analyticsData) {
+                    this.utAnalytics.renderEngagementPatterns(engagementContainer);
+                }
+                break;
+                
+            case '#audience-health':
+            case '#health':
+                // Render health topics
+                const healthContainer = document.getElementById('audienceHealth');
+                if (healthContainer && this.utAnalytics && this.utAnalytics.analyticsData) {
+                    this.utAnalytics.renderHealthTopics(healthContainer);
+                }
+                break;
+                
+            case '#audience-comments':
+            case '#comments':
+                // Load comments if not already loaded
+                if (this.modalCommentsManager && this.dataManager) {
+                    this.modalCommentsManager.loadComments(this.dataManager);
+                }
+                break;
+                
+            default:
+                console.log(`⚠️ Unknown tab: ${targetTab}`);
+                // Fallback to loading all content
+                setTimeout(() => {
+                    this.loadAudienceAnalyticsContent();
+                }, 50);
+        }
     }
     
     /**
@@ -2439,82 +3073,160 @@ class ArchiveExplorer {
             return;
         }
         
-        // Check if container is visible, if not, delay rendering
+        // Check if container is visible, if not, delay rendering (with retry limit)
         if (targetContainer.offsetWidth === 0 || targetContainer.offsetHeight === 0) {
             console.log('🔄 Word cloud container not visible, delaying render...');
-            setTimeout(() => this.renderAnalyticsWordCloud(wordFreq, container), 100);
-            return;
+            
+            // Add retry counter to prevent infinite loops
+            if (!targetContainer.dataset.retryCount) {
+                targetContainer.dataset.retryCount = '0';
+            }
+            const retryCount = parseInt(targetContainer.dataset.retryCount);
+            
+            if (retryCount < 10) {
+                targetContainer.dataset.retryCount = (retryCount + 1).toString();
+                setTimeout(() => this.renderAnalyticsWordCloud(wordFreq, container), 100);
+                return;
+            } else {
+                console.log('⚠️ Word cloud container still not visible after retries, rendering anyway...');
+                // Reset retry counter and continue with rendering
+                targetContainer.dataset.retryCount = '0';
+            }
         }
         
-        // Take top 25 words for a better cloud
-        const topWords = wordFreq.slice(0, 25);
+        // Take top 40 words for a comprehensive cloud
+        const topWords = wordFreq.slice(0, 40);
         const maxCount = Math.max(...topWords.map(w => w.count));
         const minCount = Math.min(...topWords.map(w => w.count));
         
-        // Clear and set up container with organic styling
-        targetContainer.innerHTML = '';
-        targetContainer.style.cssText = `
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            min-height: 200px;
-            line-height: 1.4;
+        // Clear and set up container for natural flow layout
+        targetContainer.innerHTML = `
+            <div class="word-cloud-header" style="width: 100%; text-align: center; margin-bottom: 20px;">
+                <p class="text-muted" style="font-size: 0.9rem; margin: 0;">Most frequently-used words in comments</p>
+            </div>
+            <div class="word-cloud-content" style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 5px;">
+            </div>
         `;
         
-        // Create organic word cloud with varied sizes and colors
-        topWords.forEach(({ word, count }, index) => {
-            // Calculate size based on frequency (12px to 32px)
+        const wordCloudContent = targetContainer.querySelector('.word-cloud-content');
+        
+        // Sort words by frequency for better visual flow
+        const sortedWords = [...topWords].sort((a, b) => b.count - a.count);
+        
+        // Create word cloud with natural flow layout
+        sortedWords.forEach(({ word, count }, index) => {
+            // Calculate size class based on frequency (1-5 scale)
             const sizeRatio = minCount === maxCount ? 0.5 : (count - minCount) / (maxCount - minCount);
-            const fontSize = Math.round(12 + sizeRatio * 20);
+            let sizeClass = Math.max(1, Math.min(5, Math.round(1 + sizeRatio * 4)));
             
-            // Vary colors for visual interest
-            const colors = [
-                '#2563eb', '#dc2626', '#059669', '#7c3aed', '#ea580c', 
-                '#0891b2', '#be123c', '#4f46e5', '#16a34a', '#c2410c'
-            ];
-            const color = colors[index % colors.length];
+            // Calculate font size based on frequency
+            const baseFontSize = 14;
+            const fontSize = baseFontSize + (sizeClass - 1) * 2;
             
-            // Create word element
+            // Create word element with rounded rectangle styling
             const wordElement = document.createElement('span');
-            wordElement.className = 'analytics-word-cloud-item';
+            wordElement.className = `analytics-word-item size-${sizeClass}`;
             wordElement.style.cssText = `
-                font-size: ${fontSize}px;
-                font-weight: ${fontSize > 20 ? 'bold' : 'normal'};
-                color: ${color};
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                padding: 8px 12px;
+                border-radius: 20px;
                 cursor: pointer;
                 transition: all 0.2s ease;
-                margin: ${Math.random() * 4}px ${Math.random() * 6}px;
-                display: inline-block;
-                line-height: 1.2;
+                user-select: none;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                font-weight: 500;
+                white-space: nowrap;
+                font-size: ${fontSize}px;
+                display: inline-flex;
+                align-items: center;
+                margin: 2px;
             `;
             
-            wordElement.innerHTML = `${word} <span style="opacity: 0.6; font-size: 0.8em;">${count}</span>`;
-            wordElement.title = `"${word}" appears ${count} times`;
+            wordElement.innerHTML = `${word} <span style="opacity: 0.8; font-size: 0.85em; margin-left: 4px;">${count}</span>`;
+            wordElement.title = `Click to filter comments containing "${word}" (${count} mentions)`;
             
             // Add hover effects
             wordElement.addEventListener('mouseenter', () => {
-                wordElement.style.transform = 'scale(1.1)';
-                wordElement.style.opacity = '0.8';
+                wordElement.style.transform = 'scale(1.05)';
+                wordElement.style.boxShadow = '0 4px 8px rgba(0,0,0,0.2)';
             });
             
             wordElement.addEventListener('mouseleave', () => {
                 wordElement.style.transform = 'scale(1)';
-                wordElement.style.opacity = '1';
+                wordElement.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
             });
             
-            // Add click to filter functionality (if needed)
-            wordElement.addEventListener('click', () => {
-                console.log(`Word cloud filter: ${word}`);
-                // Could add filtering here if desired
+            // Add click to filter functionality
+            wordElement.addEventListener('click', (e) => {
+                e.preventDefault();
+                console.log(`🔍 Filtering comments by word: "${word}"`);
+                this.filterCommentsByWord(word);
             });
             
-            targetContainer.appendChild(wordElement);
+            wordCloudContent.appendChild(wordElement);
         });
         
         console.log(`✅ Rendered organic word cloud with ${topWords.length} words`);
+    }
+
+    /**
+     * Filter comments by clicking a word in the word cloud
+     */
+    filterCommentsByWord(word) {
+        // Open the audience analytics modal if not already open
+        const modal = document.getElementById('audienceAnalyticsModal');
+        if (!modal.classList.contains('show')) {
+            const modalInstance = new bootstrap.Modal(modal);
+            modalInstance.show();
+            
+            // Wait for modal to be fully shown, then apply filter
+            modal.addEventListener('shown.bs.modal', () => {
+                this.applyWordFilter(word);
+            }, { once: true });
+        } else {
+            // Modal is already open, apply filter immediately
+            this.applyWordFilter(word);
+        }
+    }
+
+    /**
+     * Apply word filter to modal comments
+     */
+    applyWordFilter(word) {
+        if (!this.modalCommentsManager) {
+            console.warn('Modal comments manager not available');
+            return;
+        }
+
+        // Switch to the Comments tab to show filtered results
+        const commentsTab = document.querySelector('[data-bs-target="#comments"]');
+        if (commentsTab) {
+            commentsTab.click();
+        }
+
+        // Set the search term to the clicked word
+        const searchInput = document.getElementById('modalCommentSearch');
+        if (searchInput) {
+            searchInput.value = word;
+            
+            // Update the modal comments manager search term
+            this.modalCommentsManager.searchTerm = word.toLowerCase();
+            this.modalCommentsManager.currentPage = 1;
+            this.modalCommentsManager.applyFiltersAndRender();
+            
+            // Add visual feedback
+            searchInput.style.background = '#fff3cd';
+            searchInput.style.borderColor = '#ffc107';
+            
+            // Clear visual feedback after 2 seconds
+            setTimeout(() => {
+                searchInput.style.background = '';
+                searchInput.style.borderColor = '';
+            }, 2000);
+            
+            console.log(`🔍 Filtered comments to show only those containing "${word}"`);
+        }
     }
     
     /**
@@ -2749,6 +3461,12 @@ class ArchiveExplorer {
         
         // Remove single post mode class to restore app padding
         document.getElementById('app').classList.remove('single-post-mode');
+        
+        // Show channel statistics on grid view
+        const channelStatsEl = document.getElementById('channelStats');
+        if (channelStatsEl) {
+            channelStatsEl.style.display = 'block';
+        }
         
         // Show channel navigation tools and stats bar
         document.getElementById('channel-navigation').style.display = 'flex';
@@ -3372,6 +4090,37 @@ class ArchiveExplorer {
     updateStats() {
         const stats = this.dataManager.getStats();
         this.elements.totalComments.textContent = `${this.formatNumber(stats.totalComments)} comments`;
+        
+        // Update channel-wide statistics
+        this.updateChannelStats();
+    }
+
+    /**
+     * Update channel-wide statistics display
+     */
+    updateChannelStats() {
+        const stats = this.dataManager.getStats();
+        
+        // Update DOM elements with formatted numbers
+        const totalPostsEl = document.getElementById('totalPosts');
+        const totalChannelCommentsEl = document.getElementById('totalChannelComments');
+        const totalLikesEl = document.getElementById('totalLikes');
+        const uniqueCommentersEl = document.getElementById('uniqueCommenters');
+        const avgEngagementEl = document.getElementById('avgEngagement');
+        const avgLikesEl = document.getElementById('avgLikes');
+        
+        if (totalPostsEl) totalPostsEl.textContent = this.formatNumber(stats.totalVideos);
+        if (totalChannelCommentsEl) totalChannelCommentsEl.textContent = this.formatNumber(stats.totalComments);
+        if (totalLikesEl) totalLikesEl.textContent = this.formatNumber(stats.totalLikes);
+        if (uniqueCommentersEl) uniqueCommentersEl.textContent = this.formatNumber(stats.uniqueCommenters);
+        if (avgEngagementEl) avgEngagementEl.textContent = this.formatNumber(stats.averageCommentsPerVideo);
+        if (avgLikesEl) avgLikesEl.textContent = this.formatNumber(stats.averageLikesPerPost);
+        
+        // Show the statistics section
+        const channelStatsEl = document.getElementById('channelStats');
+        if (channelStatsEl) {
+            channelStatsEl.style.display = 'block';
+        }
     }
 
     /**

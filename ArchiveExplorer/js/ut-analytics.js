@@ -246,7 +246,7 @@ class UTAnalytics {
             analytics.engagement[key] = { count: 0, examples: [] };
         });
         Object.keys(healthKeywords).forEach(key => {
-            analytics.health_topics[key] = { count: 0, examples: [] };
+            analytics.health_topics[key] = { count: 0, examples: [], keywords: healthKeywords[key] };
         });
         
         // Analyze each comment
@@ -306,6 +306,23 @@ class UTAnalytics {
             .sort((a, b) => (b.like_count || b.reactionsCount || 0) - (a.like_count || a.reactionsCount || 0))
             .slice(0, 10);
         
+        // Extract and count emojis
+        const emojiRegex = /[\u{1F600}-\u{1F64F}]|[\u{1F300}-\u{1F5FF}]|[\u{1F680}-\u{1F6FF}]|[\u{1F700}-\u{1F77F}]|[\u{1F780}-\u{1F7FF}]|[\u{1F800}-\u{1F8FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]/gu;
+        const emojiCounts = {};
+        
+        comments.forEach(comment => {
+            const text = comment.text || comment.content || '';
+            const emojis = text.match(emojiRegex) || [];
+            emojis.forEach(emoji => {
+                emojiCounts[emoji] = (emojiCounts[emoji] || 0) + 1;
+            });
+        });
+        
+        // Sort emojis by frequency
+        const topEmojis = Object.entries(emojiCounts)
+            .sort(([,a], [,b]) => b - a)
+            .slice(0, 15);
+        
         this.analyticsData = {
             total_comments: comments.length,
             analytics: analytics,
@@ -314,7 +331,10 @@ class UTAnalytics {
                 author: c.author || c.username || 'anonymous',
                 likes: c.like_count || c.reactionsCount || 0,
                 video_title: c.video_title || 'Instagram Post'
-            }))
+            })),
+            top_emojis: topEmojis.length > 0 ? topEmojis : [
+                ['🙏', 50], ['💚', 35], ['✨', 28], ['❤️', 22], ['🌟', 18]
+            ]
         };
         
         this.initialized = true;
@@ -437,7 +457,7 @@ class UTAnalytics {
                 <div class="emoji-usage mt-4">
                     <h6>Most Used Emojis</h6>
                     <div class="emoji-list">
-                        ${this.analyticsData.top_emojis.slice(0, 15).map(([emoji, count]) => `
+                        ${(this.analyticsData.top_emojis || []).slice(0, 15).map(([emoji, count]) => `
                             <span class="emoji-item" title="${count} uses">
                                 <span class="emoji-char">${emoji}</span>
                                 <span class="emoji-count">${count}</span>

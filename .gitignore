@@ -72,3 +72,6 @@ MMArchiveExplorer/data/parsed/posts.csv
 **/data/comments.json
 **/data/instagram-comments.json
 **/data/*.csv
+
+# Old/archived files - moved to keep repository clean
+Old/

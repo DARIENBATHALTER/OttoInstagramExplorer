@@ -49,25 +49,27 @@
                     <h1>@jonno.otto Instagram Archive Explorer</h1>
                 </div>
             </div>
-            <div class="titlebar-center" id="channel-navigation">
-                <div class="titlebar-search">
-                    <i class="fas fa-search"></i>
-                    <input type="text" id="search-input" placeholder="Search posts by content, author, or keywords...">
+            <div class="titlebar-right">
+                <div class="titlebar-center" id="channel-navigation">
+                    <div class="titlebar-search">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="search-input" placeholder="Search posts by content, author, or keywords...">
+                    </div>
+                    <div class="titlebar-filters">
+                        <select id="sort-select" class="titlebar-filter-btn" style="border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 6px; background: rgba(255, 255, 255, 0.1); color: var(--titlebar-text); padding: 8px 12px;">
+                            <option value="date-desc">Newest First</option>
+                            <option value="date-asc">Oldest First</option>
+                            <option value="views-desc">Most Likes</option>
+                            <option value="views-asc">Least Likes</option>
+                            <option value="comments-desc">Most Comments</option>
+                            <option value="comments-asc">Least Comments</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="titlebar-filters">
-                    <select id="sort-select" class="titlebar-filter-btn" style="border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 6px; background: rgba(255, 255, 255, 0.1); color: var(--titlebar-text); padding: 8px 12px;">
-                        <option value="date-desc">Newest First</option>
-                        <option value="date-asc">Oldest First</option>
-                        <option value="views-desc">Most Likes</option>
-                        <option value="views-asc">Least Likes</option>
-                        <option value="comments-desc">Most Comments</option>
-                        <option value="comments-asc">Least Comments</option>
-                    </select>
-                </div>
+                <button class="help-button" id="about-btn" data-bs-toggle="modal" data-bs-target="#aboutModal" title="About">
+                    <i class="fas fa-question"></i>
+                </button>
             </div>
-            <button class="help-button" id="about-btn" data-bs-toggle="modal" data-bs-target="#aboutModal" title="About">
-                <i class="fas fa-question"></i>
-            </button>
         </div>
     </div>
 
@@ -213,8 +215,68 @@
     </div>
 
     <!-- Main App -->
-    <div id="app" class="container-fluid" style="display: none;">
+    <div id="app" style="display: none;">
         
+        <!-- Channel-Wide Statistics -->
+        <div id="channelStats" class="channel-stats mb-4" style="display: none;">
+            <div class="row g-3">
+                <div class="col-md-2 col-sm-6">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="bi bi-grid-3x3-gap-fill"></i>
+                        </div>
+                        <div class="stat-number" id="totalPosts">0</div>
+                        <div class="stat-label">Total<br>Posts</div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="bi bi-chat-dots-fill"></i>
+                        </div>
+                        <div class="stat-number" id="totalChannelComments">0</div>
+                        <div class="stat-label">Total<br>Comments</div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="bi bi-heart-fill"></i>
+                        </div>
+                        <div class="stat-number" id="totalLikes">0</div>
+                        <div class="stat-label">Total<br>Likes</div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="bi bi-people-fill"></i>
+                        </div>
+                        <div class="stat-number" id="uniqueCommenters">0</div>
+                        <div class="stat-label">Unique<br>Commenters</div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="bi bi-bar-chart-fill"></i>
+                        </div>
+                        <div class="stat-number" id="avgEngagement">0</div>
+                        <div class="stat-label">Avg Comments<br>Per Post</div>
+                    </div>
+                </div>
+                <div class="col-md-2 col-sm-6">
+                    <div class="stat-card">
+                        <div class="stat-icon">
+                            <i class="bi bi-heart-pulse-fill"></i>
+                        </div>
+                        <div class="stat-number" id="avgLikes">0</div>
+                        <div class="stat-label">Avg Likes<br>Per Post</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Stats Bar -->
         <div id="statsBarContainer" class="d-flex justify-content-between align-items-center mb-3">
             <!-- View Toggle -->

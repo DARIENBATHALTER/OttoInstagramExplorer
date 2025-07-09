@@ -1036,12 +1036,25 @@ class DataManager {
         const totalVideos = this.videos.length;
         const totalViews = this.videos.reduce((sum, v) => sum + v.view_count, 0);
         
+        // Calculate Instagram-specific statistics
+        const totalLikes = this.videos.reduce((sum, video) => {
+            return sum + (parseInt(video.like_count) || 0);
+        }, 0);
+        
+        const uniqueCommenters = new Set(this.comments.map(comment => comment.author)).size;
+        
+        // Calculate average likes per post
+        const averageLikesPerPost = totalVideos > 0 ? Math.round(totalLikes / totalVideos) : 0;
+        
         return {
             totalVideos,
             totalComments,
             totalReplies,
             totalViews,
-            averageCommentsPerVideo: Math.round(totalComments / totalVideos),
+            totalLikes,
+            uniqueCommenters,
+            averageCommentsPerVideo: totalVideos > 0 ? Math.round(totalComments / totalVideos) : 0,
+            averageLikesPerPost,
             videosWithMapping: Object.keys(this.videoMapping).length
         };
     }
