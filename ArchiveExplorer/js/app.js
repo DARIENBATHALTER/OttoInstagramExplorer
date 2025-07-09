@@ -1845,6 +1845,16 @@ class ArchiveExplorer {
             pane.classList.remove('active');
         });
         document.getElementById(`${tabName}Tab`).classList.add('active');
+        
+        // Re-render word cloud when insights tab is activated
+        if (tabName === 'insights') {
+            setTimeout(() => {
+                if (this.preloadedWordFreq) {
+                    console.log('🔄 Re-rendering word cloud after tab switch...');
+                    this.renderAnalyticsWordCloud(this.preloadedWordFreq);
+                }
+            }, 50); // Small delay to ensure tab is visible
+        }
     }
     
     /**
@@ -2418,7 +2428,7 @@ class ArchiveExplorer {
     }
     
     /**
-     * Render word cloud in analytics panel
+     * Render word cloud in analytics panel with organic layout
      */
     renderAnalyticsWordCloud(wordFreq, container = null) {
         const targetContainer = container || document.getElementById('analyticsWordCloud');
@@ -2429,20 +2439,82 @@ class ArchiveExplorer {
             return;
         }
         
-        // Calculate sizes based on frequency
-        const maxCount = Math.max(...wordFreq.map(w => w.count));
-        const minCount = Math.min(...wordFreq.map(w => w.count));
+        // Check if container is visible, if not, delay rendering
+        if (targetContainer.offsetWidth === 0 || targetContainer.offsetHeight === 0) {
+            console.log('🔄 Word cloud container not visible, delaying render...');
+            setTimeout(() => this.renderAnalyticsWordCloud(wordFreq, container), 100);
+            return;
+        }
         
-        const html = wordFreq.slice(0, 15).map(({ word, count }) => {
-            const relativeSize = minCount === maxCount ? 2 : 
-                Math.round(1 + (count - minCount) / (maxCount - minCount) * 3);
-                
-            return `<span class="analytics-word-item size-${relativeSize}" title="${count} mentions">
-                ${word} <span style="opacity: 0.7;">${count}</span>
-            </span>`;
-        }).join('');
+        // Take top 25 words for a better cloud
+        const topWords = wordFreq.slice(0, 25);
+        const maxCount = Math.max(...topWords.map(w => w.count));
+        const minCount = Math.min(...topWords.map(w => w.count));
         
-        targetContainer.innerHTML = html;
+        // Clear and set up container with organic styling
+        targetContainer.innerHTML = '';
+        targetContainer.style.cssText = `
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            min-height: 200px;
+            line-height: 1.4;
+        `;
+        
+        // Create organic word cloud with varied sizes and colors
+        topWords.forEach(({ word, count }, index) => {
+            // Calculate size based on frequency (12px to 32px)
+            const sizeRatio = minCount === maxCount ? 0.5 : (count - minCount) / (maxCount - minCount);
+            const fontSize = Math.round(12 + sizeRatio * 20);
+            
+            // Vary colors for visual interest
+            const colors = [
+                '#2563eb', '#dc2626', '#059669', '#7c3aed', '#ea580c', 
+                '#0891b2', '#be123c', '#4f46e5', '#16a34a', '#c2410c'
+            ];
+            const color = colors[index % colors.length];
+            
+            // Create word element
+            const wordElement = document.createElement('span');
+            wordElement.className = 'analytics-word-cloud-item';
+            wordElement.style.cssText = `
+                font-size: ${fontSize}px;
+                font-weight: ${fontSize > 20 ? 'bold' : 'normal'};
+                color: ${color};
+                cursor: pointer;
+                transition: all 0.2s ease;
+                margin: ${Math.random() * 4}px ${Math.random() * 6}px;
+                display: inline-block;
+                line-height: 1.2;
+            `;
+            
+            wordElement.innerHTML = `${word} <span style="opacity: 0.6; font-size: 0.8em;">${count}</span>`;
+            wordElement.title = `"${word}" appears ${count} times`;
+            
+            // Add hover effects
+            wordElement.addEventListener('mouseenter', () => {
+                wordElement.style.transform = 'scale(1.1)';
+                wordElement.style.opacity = '0.8';
+            });
+            
+            wordElement.addEventListener('mouseleave', () => {
+                wordElement.style.transform = 'scale(1)';
+                wordElement.style.opacity = '1';
+            });
+            
+            // Add click to filter functionality (if needed)
+            wordElement.addEventListener('click', () => {
+                console.log(`Word cloud filter: ${word}`);
+                // Could add filtering here if desired
+            });
+            
+            targetContainer.appendChild(wordElement);
+        });
+        
+        console.log(`✅ Rendered organic word cloud with ${topWords.length} words`);
     }
     
     /**
