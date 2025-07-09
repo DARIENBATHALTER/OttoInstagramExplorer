@@ -727,7 +727,16 @@ class DataManager {
     async getVideos(filters = {}, pagination = { page: 1, limit: 24 }) {
         let filteredVideos = [...this.videos];
 
-        // Apply filters
+        // Filter out posts without media files first
+        filteredVideos = filteredVideos.filter(video => {
+            if (video.hasMedia === false) {
+                console.log(`🚫 Hiding post without media: ${video.shortcode || video.video_id}`);
+                return false;
+            }
+            return true;
+        });
+
+        // Apply other filters
         if (filters.search) {
             const searchLower = filters.search.toLowerCase();
             filteredVideos = filteredVideos.filter(video => 

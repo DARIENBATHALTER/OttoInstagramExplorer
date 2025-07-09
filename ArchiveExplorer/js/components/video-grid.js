@@ -293,43 +293,64 @@ class VideoGridComponent {
         });
         
         video.addEventListener('seeked', () => {
-            // Create canvas and draw video frame
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            // Use Instagram aspect ratio (625:830) with higher resolution
-            const instagramAspect = 625 / 830;
-            canvas.width = 625;
-            canvas.height = 830;
-            
-            // Calculate how to fit video into Instagram aspect ratio
-            const videoAspect = video.videoWidth / video.videoHeight;
-            let drawWidth, drawHeight, drawX, drawY;
-            
-            if (videoAspect > instagramAspect) {
-                // Video is wider than Instagram format - fit to height
-                drawHeight = canvas.height;
-                drawWidth = drawHeight * videoAspect;
-                drawX = (canvas.width - drawWidth) / 2;
-                drawY = 0;
-            } else {
-                // Video is taller than Instagram format - fit to width
-                drawWidth = canvas.width;
-                drawHeight = drawWidth / videoAspect;
-                drawX = 0;
-                drawY = (canvas.height - drawHeight) / 2;
+            try {
+                // Create canvas and draw video frame
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                // Use Instagram aspect ratio (625:830) with higher resolution
+                const instagramAspect = 625 / 830;
+                canvas.width = 625;
+                canvas.height = 830;
+                
+                // Calculate how to fit video into Instagram aspect ratio
+                const videoAspect = video.videoWidth / video.videoHeight;
+                let drawWidth, drawHeight, drawX, drawY;
+                
+                if (videoAspect > instagramAspect) {
+                    // Video is wider than Instagram format - fit to height
+                    drawHeight = canvas.height;
+                    drawWidth = drawHeight * videoAspect;
+                    drawX = (canvas.width - drawWidth) / 2;
+                    drawY = 0;
+                } else {
+                    // Video is taller than Instagram format - fit to width
+                    drawWidth = canvas.width;
+                    drawHeight = drawWidth / videoAspect;
+                    drawX = 0;
+                    drawY = (canvas.height - drawHeight) / 2;
+                }
+                
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
+                
+                // Convert to blob and set as image source
+                canvas.toBlob((blob) => {
+                    const thumbnailUrl = URL.createObjectURL(blob);
+                    imgElement.src = thumbnailUrl;
+                    this.thumbnailCache.set(shortcode, thumbnailUrl);
+                    
+                    // Clean up video element to prevent WebMediaPlayer accumulation
+                    video.src = '';
+                    video.load();
+                    video.remove();
+                }, 'image/jpeg', 0.8);
+            } catch (error) {
+                console.error('Error generating thumbnail:', error);
+                // Clean up video element even on error
+                video.src = '';
+                video.load();
+                video.remove();
             }
-            
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(video, drawX, drawY, drawWidth, drawHeight);
-            
-            // Convert to blob and set as image source
-            canvas.toBlob((blob) => {
-                const thumbnailUrl = URL.createObjectURL(blob);
-                imgElement.src = thumbnailUrl;
-                this.thumbnailCache.set(shortcode, thumbnailUrl);
-            }, 'image/jpeg', 0.8);
+        });
+        
+        // Add error handler to clean up video element on loading errors
+        video.addEventListener('error', () => {
+            console.warn('Failed to load video for thumbnail generation');
+            video.src = '';
+            video.load();
+            video.remove();
         });
         
         video.src = videoUrl;

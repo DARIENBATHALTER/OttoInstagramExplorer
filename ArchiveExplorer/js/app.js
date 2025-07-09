@@ -1431,7 +1431,20 @@ class ArchiveExplorer {
             canvas.toBlob((blob) => {
                 const thumbnailUrl = URL.createObjectURL(blob);
                 imgElement.src = thumbnailUrl;
+                
+                // Clean up video element to prevent WebMediaPlayer accumulation
+                video.src = '';
+                video.load();
+                video.remove();
             }, 'image/jpeg', 0.8);
+        });
+        
+        // Add error handler to clean up video element on loading errors
+        video.addEventListener('error', () => {
+            console.warn('Failed to load video for list thumbnail generation');
+            video.src = '';
+            video.load();
+            video.remove();
         });
         
         video.src = videoUrl;
